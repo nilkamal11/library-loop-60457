@@ -62,13 +62,13 @@ export default function Home() {
           <a className="nav-link active" href="#day"><span aria-hidden="true">▦</span> Day planner</a>
           <a className="nav-link" href="#week"><span aria-hidden="true">□</span> Week view</a>
           <a className="nav-link" href="#map"><span aria-hidden="true">⌖</span> Library map</a>
-          <a className="nav-link" href="#sources"><span aria-hidden="true">↻</span> Calendar sources</a>
+          <a className="nav-link" href="/sources"><span aria-hidden="true">↻</span> Calendar sources</a>
         </nav>
         <div className="sidebar-spacer" />
         <section className="coverage-card" id="sources" aria-label="Search coverage">
           <p className="eyebrow">Search coverage</p><strong>15 mile radius</strong>
           <p>75 library systems<br />132 physical branches</p>
-          <div className="coverage-meter"><span /></div><small>Calendar connections in research</small>
+          <div className="coverage-meter connected"><span /></div><small>65 calendars ready to automate</small>
         </section>
       </aside>
 
