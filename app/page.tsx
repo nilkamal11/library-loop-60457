@@ -74,7 +74,7 @@ export default function Home() {
 
       <section className="workspace">
         <header className="topbar">
-          <div><p className="eyebrow">{dates[selectedDate].label}</p><h1>{selectedDate === 0 ? 'Saturday plans, sorted.' : `${dates[selectedDate].day} plans, sorted.`}</h1><p className="lede">Library events for kids ages 7–16, close to 60457.</p></div>
+          <div><p className="eyebrow">{dates[selectedDate].label}</p><h1>{dates[selectedDate].day} library events.</h1><p className="lede">For kids ages 7–16, within 15 miles of 60457.</p></div>
           <button className="location-button" type="button" title="The starting ZIP for this dashboard"><span className="location-dot" aria-hidden="true" /> 60457 <span aria-hidden="true">⌄</span></button>
         </header>
 
