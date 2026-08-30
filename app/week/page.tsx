@@ -11,6 +11,7 @@ import {
 } from '@/lib/live-event';
 import { fetchBrowserOnlyEvents, mergeEventSources } from '@/lib/browser-only-feeds';
 import { fetchDiscoveryEvents } from '@/lib/discovery-events';
+import { fetchOvernightEvents } from '@/lib/overnight-events';
 
 export default function WeekPage() {
   const [weekStart, setWeekStart] = useState(chicagoTodayKey);
@@ -28,9 +29,10 @@ export default function WeekPage() {
       }),
       fetchBrowserOnlyEvents(weekStart, controller.signal),
       fetchDiscoveryEvents(weekStart, controller.signal),
+      fetchOvernightEvents(weekStart, controller.signal),
     ])
-      .then(([serverData, browserData, discoveryData]) => {
-        setData(mergeEventSources(serverData, browserData, discoveryData));
+      .then(([serverData, browserData, discoveryData, overnightData]) => {
+        setData(mergeEventSources(serverData, browserData, discoveryData, overnightData));
         setLoadState('ready');
       })
       .catch((error: unknown) => {

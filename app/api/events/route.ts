@@ -2,7 +2,13 @@ import { addDays, chicagoTodayKey, type LiveEvent, type SourceKind } from '@/lib
 
 export const runtime = 'edge';
 
-type FeedType = 'librarycalendar' | 'tribe' | 'civicplus' | 'squarespace';
+type FeedType = 'librarycalendar' | 'tribe' | 'civicplus' | 'squarespace' | 'communico' | 'rss' | 'bibliocommons' | 'mycalendar';
+
+type BranchRule = {
+  match: string;
+  distance: number;
+  address: string;
+};
 
 type FeedConfig = {
   id: string;
@@ -16,11 +22,18 @@ type FeedConfig = {
   venueDistance?: boolean;
   icsUtc?: boolean;
   maxPages?: number;
+  branchRules?: BranchRule[];
+  strictBranchDistance?: boolean;
+  multiBranchAddress?: string;
 };
 
 type UnknownRecord = Record<string, unknown>;
 
 const ZIP_CENTER = { lat: 41.7244, lng: -87.8273 };
+
+const CHICAGO_BIBLIO_AUDIENCES = '53f250153860d10000000010,5bc796d5c0db9c5c64d684c9,53f250153860d10000000011';
+const CHICAGO_BIBLIO_LOCATIONS = '21,31,63,82,77,52,5,19,10,72,29,13,14,76,68,81,69,9,78,64,40,45,50,59,80,25,17,6,42,23,32,22,33,75,8,47,18,4,41,90,54,62,48,24,12,20,39,30,55,66,88,36,65,79,34,74';
+const CHICAGO_BIBLIO_ENDPOINT = `https://gateway.bibliocommons.com/v2/libraries/chipublib/rss/events?audiences=${CHICAGO_BIBLIO_AUDIENCES}&locations=${CHICAGO_BIBLIO_LOCATIONS}`;
 
 const feeds: FeedConfig[] = [
   { id: 'green-hills', name: 'Green Hills Public Library District', endpoint: 'https://greenhillspld.librarycalendar.com/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 1.4, address: '8611 W 103rd St, Palos Hills, IL 60465' },
@@ -38,6 +51,59 @@ const feeds: FeedConfig[] = [
   { id: 'north-riverside-library', name: 'North Riverside Public Library District', endpoint: 'https://www.nrpl.info/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Library', distance: 8.47, address: '2400 S Des Plaines Ave, North Riverside, IL 60546' },
   { id: 'acorn-library', name: 'Acorn Public Library District', endpoint: 'https://acornlibrary.org/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Library', distance: 8.89, address: '15624 Central Ave, Oak Forest, IL 60452' },
   { id: 'westmont-library', name: 'Westmont Public Library', endpoint: 'https://westmontlibrary.libcal.com/ical_subscribe.php?src=p&cid=21445', type: 'civicplus', sourceKind: 'Library', distance: 9.44, address: '428 N Cass Ave, Westmont, IL 60559', icsUtc: true },
+  { id: 'chicago-ridge-library', name: 'Chicago Ridge Public Library', endpoint: 'https://chicagoridgepubliclibrary.libnet.info/eeventcaldata', type: 'communico', sourceKind: 'Library', distance: 3.04, address: '10400 Oxford Ave, Chicago Ridge, IL 60415' },
+  { id: 'chicago-public-library', name: 'Chicago Public Library', endpoint: CHICAGO_BIBLIO_ENDPOINT, type: 'bibliocommons', sourceKind: 'Library', distance: 4.4, address: '6423 W 63rd Pl, Chicago, IL 60638', maxPages: 8 },
+  { id: 'stickney-forest-view-library', name: 'Stickney-Forest View Public Library District', endpoint: 'https://sfvpld.libcal.com/ical_subscribe.php?src=p&cid=19438', type: 'civicplus', sourceKind: 'Library', distance: 6.53, address: '6800 W 43rd St, Stickney, IL 60402', icsUtc: true },
+  { id: 'riverside-library', name: 'Riverside Public Library', endpoint: 'https://riversidelibrary.libcal.com/ical_subscribe.php?src=p&cid=14332', type: 'civicplus', sourceKind: 'Library', distance: 7.12, address: '1 Burling Rd, Riverside, IL 60546', icsUtc: true },
+  { id: 'brookfield-library', name: 'Linda Sokol Francis Brookfield Library', endpoint: 'https://lsfbrookfieldlibrary.libnet.info/eeventcaldata', type: 'communico', sourceKind: 'Library', distance: 7.13, address: '3541 Park Ave, Brookfield, IL 60513' },
+  { id: 'hinsdale-library', name: 'Hinsdale Public Library', endpoint: 'https://hinsdale.libnet.info/eeventcaldata', type: 'communico', sourceKind: 'Library', distance: 7.58, address: '20 E Maple St, Hinsdale, IL 60521' },
+  { id: 'clarendon-hills-library', name: 'Clarendon Hills Public Library', endpoint: 'https://clarendonhillslibrary.libcal.com/ical_subscribe.php?src=p&cid=19818', type: 'civicplus', sourceKind: 'Library', distance: 8.25, address: '7 N Prospect Ave, Clarendon Hills, IL 60514', icsUtc: true },
+  { id: 'berwyn-library', name: 'Berwyn Public Library', endpoint: 'https://berwynlibrary.libcal.com/ical_subscribe.php?src=p&cid=11242', type: 'civicplus', sourceKind: 'Library', distance: 8.25, address: '2701 S Harlem Ave, Berwyn, IL 60402', icsUtc: true },
+  { id: 'midlothian-library', name: 'Midlothian Public Library', endpoint: 'https://midlothian.librarycalendar.com/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 8.47, address: '14701 S Kenton Ave, Midlothian, IL 60445' },
+  { id: 'blue-island-library', name: 'Blue Island Public Library', endpoint: 'https://blueislandpl.librarycalendar.com/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 8.93, address: '2433 York St, Blue Island, IL 60406' },
+  { id: 'cicero-library', name: 'Cicero Public Library', endpoint: 'https://ciceropl.librarycalendar.com/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 9.59, address: '5225 W Cermak Rd, Cicero, IL 60804' },
+  { id: 'westchester-library', name: 'Westchester Public Library', endpoint: 'https://westchesterpl.libcal.com/ical_subscribe.php?src=p&cid=18760', type: 'civicplus', sourceKind: 'Library', distance: 9.6, address: '10700 Canterbury St, Westchester, IL 60154', icsUtc: true },
+  { id: 'broadview-library', name: 'Broadview Public Library District', endpoint: 'https://broadviewlibrary.libcal.com/ical_subscribe.php?src=p&cid=7531', type: 'civicplus', sourceKind: 'Library', distance: 9.71, address: '2226 S 16th Ave, Broadview, IL 60155', icsUtc: true },
+  { id: 'calumet-park-library', name: 'Calumet Park Public Library', endpoint: 'https://cpplibrary.org/wp-json/my-calendar/v1/events', type: 'mycalendar', sourceKind: 'Library', distance: 9.77, address: '1500 W 127th St, Calumet Park, IL 60827' },
+  { id: 'lemont-library', name: 'Lemont Public Library District', endpoint: 'https://lemontlibrary.libnet.info/eeventcaldata', type: 'communico', sourceKind: 'Library', distance: 10.04, address: '50 E Wend St, Lemont, IL 60439' },
+  { id: 'homer-township-library', name: 'Homer Township Public Library District', endpoint: 'https://www.homerlibrary.org/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 10.42, address: '14320 W 151st St, Homer Glen, IL 60491' },
+  { id: 'forest-park-library', name: 'Forest Park Public Library', endpoint: 'https://cc.fppl.org/events/categories/forest-park-public-library/feed/', type: 'rss', sourceKind: 'Library', distance: 10.53, address: '7555 Jackson Blvd, Forest Park, IL 60130' },
+  { id: 'oak-park-library', name: 'Oak Park Public Library', endpoint: 'https://oakpark.librarycalendar.com/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 10.54, address: '845 S Gunderson Ave, Oak Park, IL 60304', multiBranchAddress: 'Multiple Oak Park Public Library locations; see official listing', branchRules: [
+    { match: 'Maze Branch Library', distance: 10.54, address: '845 S Gunderson Ave, Oak Park, IL 60304' },
+    { match: 'Main Library', distance: 11.52, address: '834 Lake St, Oak Park, IL 60301' },
+    { match: 'Dole Branch Library', distance: 12.29, address: '255 Augusta St, Oak Park, IL 60302' },
+    { match: 'Virtual', distance: 10.54, address: 'Online event' },
+  ] },
+  { id: 'downers-grove-library', name: 'Downers Grove Public Library', endpoint: 'https://downersgrove.libnet.info/eeventcaldata', type: 'communico', sourceKind: 'Library', distance: 10.55, address: '1050 Curtiss St, Downers Grove, IL 60515' },
+  { id: 'tinley-park-library', name: 'Tinley Park Public Library', endpoint: 'https://tinley.libnet.info/eeventcaldata', type: 'communico', sourceKind: 'Library', distance: 11.18, address: '7851 Timber Dr, Tinley Park, IL 60477' },
+  { id: 'hillside-library', name: 'Hillside Public Library', endpoint: 'https://hillsidepl.librarycalendar.com/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 11.35, address: '405 N Hillside Ave, Hillside, IL 60162' },
+  { id: 'woodridge-library', name: 'Woodridge Public Library', endpoint: 'https://www.woodridgelibrary.org/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 11.35, address: '3 Plaza Dr, Woodridge, IL 60517' },
+  { id: 'river-forest-library', name: 'River Forest Public Library', endpoint: 'https://www.riverforestlibrary.org/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 11.7, address: '735 Lathrop Ave, River Forest, IL 60305' },
+  { id: 'riverdale-library', name: 'Riverdale Public Library District', endpoint: 'https://rpld.org/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Library', distance: 12.16, address: '208 W 144th St, Riverdale, IL 60827' },
+  { id: 'fountaindale-library', name: 'Fountaindale Public Library District', endpoint: 'https://fountaindale.libnet.info/eeventcaldata', type: 'communico', sourceKind: 'Library', distance: 13, address: '300 W Briarcliff Rd, Bolingbrook, IL 60440' },
+  { id: 'lisle-library', name: 'Lisle Library District', endpoint: 'https://lisle.librarycalendar.com/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 13.23, address: '777 Front St, Lisle, IL 60532' },
+  { id: 'mokena-library', name: 'Mokena Community Public Library District', endpoint: 'https://mokena.librarycalendar.com/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 13.43, address: '11327 W 195th St, Mokena, IL 60448' },
+  { id: 'elmhurst-library', name: 'Elmhurst Public Library', endpoint: 'https://elmhurstpubliclibrary.libcal.com/ical_subscribe.php?src=p&cid=19398', type: 'civicplus', sourceKind: 'Library', distance: 13.46, address: '125 S Prospect Ave, Elmhurst, IL 60126', icsUtc: true },
+  { id: 'villa-park-library', name: 'Villa Park Public Library', endpoint: 'https://villapark.librarycalendar.com/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 13.52, address: '305 S Ardmore Ave, Villa Park, IL 60181' },
+  { id: 'northlake-library', name: 'Northlake Public Library District', endpoint: 'https://www.northlakelibrary.org/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Library', distance: 13.52, address: '231 N Wolf Rd, Northlake, IL 60164' },
+  { id: 'homewood-library', name: 'Homewood Public Library District', endpoint: 'https://homewood.librarycalendar.com/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 13.92, address: '17917 Dixie Hwy, Homewood, IL 60430' },
+  { id: 'white-oak-library', name: 'White Oak Library District', endpoint: 'https://whiteoak.librarycalendar.com/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 14.05, address: '201 W Normantown Rd, Romeoville, IL 60446', strictBranchDistance: true, multiBranchAddress: 'Multiple White Oak Library District locations; see official listing', branchRules: [
+    { match: 'Romeoville', distance: 14.05, address: '201 W Normantown Rd, Romeoville, IL 60446' },
+    { match: 'Lockport', distance: 14.9, address: '121 E 8th St, Lockport, IL 60441' },
+    { match: 'Crest Hill', distance: 18.32, address: '20670 City Center Blvd, Crest Hill, IL 60403' },
+  ] },
+  { id: 'elmwood-park-library', name: 'Elmwood Park Public Library', endpoint: 'https://elmwoodpark.librarycalendar.com/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 14.06, address: '1 Conti Pkwy, Elmwood Park, IL 60707' },
+  { id: 'south-holland-library', name: 'South Holland Public Library', endpoint: 'https://www.shlibrary.org/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 14.22, address: '16250 Wausau Ave, South Holland, IL 60473' },
+  { id: 'river-grove-library', name: 'River Grove Public Library District', endpoint: 'https://rivergrovelibrary.libcal.com/ical_subscribe.php?src=p&cid=5557', type: 'civicplus', sourceKind: 'Library', distance: 14.24, address: '8638 W Grand Ave, River Grove, IL 60171', icsUtc: true },
+  { id: 'helen-plum-library', name: 'Helen Plum Library', endpoint: 'https://www.helenplum.org/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 14.52, address: '411 S Main St, Lombard, IL 60148' },
+  { id: 'franklin-park-library', name: 'Franklin Park Public Library District', endpoint: 'https://www.fppld.org/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Library', distance: 14.52, address: '10311 Grand Ave, Franklin Park, IL 60131' },
+  { id: 'flossmoor-library', name: 'Flossmoor Public Library', endpoint: 'https://flossmoor.librarycalendar.com/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 14.67, address: '1000 Sterling Ave, Flossmoor, IL 60422' },
+  { id: 'naperville-library', name: 'Naperville Public Library', endpoint: 'https://napervillepl.librarycalendar.com/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 14.88, address: '2035 S Naper Blvd, Naperville, IL 60565', strictBranchDistance: true, multiBranchAddress: 'Multiple Naperville Public Library locations; see official listing', branchRules: [
+    { match: 'Naper Blvd. Library', distance: 14.88, address: '2035 S Naper Blvd, Naperville, IL 60565' },
+    { match: 'Nichols Library', distance: 16.96, address: '200 W Jefferson Ave, Naperville, IL 60540' },
+    { match: '95th Street Library', distance: 19.18, address: '3015 Cedar Glade Dr, Naperville, IL 60564' },
+    { match: 'Online', distance: 14.88, address: 'Online event' },
+  ] },
   { id: 'fpdcc', name: 'Forest Preserves of Cook County', endpoint: 'https://fpdcc.com/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Forest preserve', distance: 15, address: 'Venue varies', venueDistance: true, maxPages: 3 },
   { id: 'lake-katherine', name: 'Lake Katherine Nature Center', endpoint: 'https://www.lakekatherine.org/common/modules/iCalendar/iCalendar.aspx?catID=14&feed=calendar', type: 'civicplus', sourceKind: 'Forest preserve', distance: 3.6, address: '7402 Lake Katherine Dr, Palos Heights, IL 60463', detailBase: 'https://www.lakekatherine.org/calendar.aspx?EID=' },
   { id: 'western-springs-community', name: 'Western Springs Community Events', endpoint: 'https://www.wsprings.com/common/modules/iCalendar/iCalendar.aspx?catID=14&feed=calendar', type: 'civicplus', sourceKind: 'Recreation', distance: 7.8, address: 'Western Springs, IL 60558', detailBase: 'https://www.wsprings.com/calendar.aspx?EID=' },
@@ -120,10 +186,17 @@ function isFalse(value: unknown) {
   return value === false || value === 0 || value === '0' || value === 'false';
 }
 
+function isTrue(value: unknown) {
+  return value === true || value === 1 || value === '1' || value === 'true';
+}
+
 function explicitAge(text: string) {
   const candidates: Array<{ min: number; max: number; label: string }> = [];
   for (const exactYears of text.matchAll(/\b(?:ages?|age)\s*:?\s*(\d{1,2})\s*(?:yrs?|years?)?\s*(?:[-–—]|to|through)\s*(\d{1,2})\s*(?:yrs?|years?)\b/gi)) {
     candidates.push({ min: Number(exactYears[1]), max: Number(exactYears[2]), label: `Ages ${exactYears[1]}–${exactYears[2]}` });
+  }
+  for (const statedYears of text.matchAll(/\b(\d{1,2})\s*(?:[-–—]|to|through)\s*(\d{1,2})\s*years?\b/gi)) {
+    candidates.push({ min: Number(statedYears[1]), max: Number(statedYears[2]), label: `Ages ${statedYears[1]}–${statedYears[2]}` });
   }
   for (const exact of text.matchAll(/\b(?:ages?|age)\s*:?\s*(\d{1,2})\s*(?:[-–—]|to|through)\s*(\d{1,2})\b/gi)) {
     candidates.push({ min: Number(exact[1]), max: Number(exact[2]), label: `Ages ${exact[1]}–${exact[2]}` });
@@ -141,13 +214,13 @@ function explicitAge(text: string) {
     return {
       ...selected,
       includesNine: matching.some((candidate) => candidate.min <= 9 && candidate.max >= 9),
-      teenOnly: matching.length > 0 && matching.every((candidate) => candidate.min >= 13),
+      teenOnly: matching.length > 0 && matching.every((candidate) => candidate.min >= 12),
     };
   }
   const single = text.match(/\b(?:ages?|age)\s*:?\s*(\d{1,2})\b/i);
   if (single) {
     const value = Number(single[1]);
-    return { min: value, max: value, label: `Age ${single[1]}`, includesNine: value === 9, teenOnly: value >= 13 };
+    return { min: value, max: value, label: `Age ${single[1]}`, includesNine: value === 9, teenOnly: value >= 12 };
   }
   return null;
 }
@@ -164,9 +237,10 @@ function deriveAudience(title: string, description: string, labels: string[], so
     || namedAudience.includes('diversiteen')
     || namedAudience.includes('volunteen')
     || /\b(?:for teens?|teens? only|high school students?)\b/.test(lower);
+  const namedYoungerAudience = /\bchildren|kids?|youth|elementary|school[- ]age\b/.test(namedAudience);
   const teenOnly = age
     ? Boolean(age.teenOnly) || (!age.includesNine && namedTeen)
-    : namedTeen;
+    : namedTeen && !namedYoungerAudience;
   const adultOnly = /\badults? only\b|\b18\s*(?:\+|and (?:up|older))|\b21\s*\+|\bseniors?\b|\b55\s*\+/.test(lower);
   const youngOnly = /\b(?:bab(?:y|ies)|toddlers?|tots?|preschool(?:ers)?|birth\s*(?:-|to|through)\s*5)\b/.test(lower);
   const administrative = /\b(board|committee|commission) meetings?\b|public hearing|bid opening|meeting minutes/.test(lower);
@@ -174,7 +248,7 @@ function deriveAudience(title: string, description: string, labels: string[], so
   const youth = /\bchildren|child(?:ren)?|kids?|youth|school[- ]age|homeschool/.test(lower);
   const adultActivity = /\b(bodypump|cycle|cycling|spin|nia|foam rolling|werq|zumba|pilates|barre|yoga|cardio|aerobics|fitness class|workout|strength training|pickleball|golf league|softball league)\b/.test(lower);
   const adultProgram = /\b(adults?|lapidary|lunch\s*(?:&|and)\s*learn|independent housing|retirement|medicare|matinee|provider training|staff training|certification)\b/.test(lower);
-  const notAnEvent = /\b(?:pool|office|village hall|facility|building)\s+(?:is\s+)?closed\b|\bclosed\s+(?:august|september|october|november|december|january|february|march|april|may|june|july)|delayed opening|holiday hours/.test(lower);
+  const notAnEvent = /\b(?:library|branch|pool|office|village hall|facility|building)\s+(?:is\s+)?closed\b|\bclosed\s+(?:on|for|august|september|october|november|december|january|february|march|april|may|june|july)|delayed opening|holiday hours/.test(lower);
   const generalPublicActivity = /\b(concert|festival|fest|fair|market|hike|walk|nature|hummingbirds?|birds?|bones?|kayak|open mic|improv|spray pad|swim|skate|climb|ceramics|arts?|craft|story|show|garage sale|touch-a-truck|yappy|wildlife|music|bingo|movie|theat(?:er|re)|audition|health fair|dance|holiday|celebration|workshop)\b/.test(lower);
   if (administrative || notAnEvent || (adultOnly && !age) || ((adultActivity || adultProgram) && !age && !teen && !youth && !familyNamed)) return { include: false, ages: '', teenOnly: false, family: false };
   if (age) return { include: age.min <= 16 && age.max >= 7, ages: age.label, teenOnly, family };
@@ -256,6 +330,15 @@ function registrationState(record: UnknownRecord, description: string, startLoca
     }
     return 'No signup listed';
   }
+  if (type === 'communico') {
+    const capacity = Number(record.max_attendee ?? record.seat_limit);
+    const registered = Number(record.total_registrants);
+    if (Number.isFinite(capacity) && capacity > 0 && Number.isFinite(registered) && registered >= capacity) {
+      return 'Registration closed / waitlist';
+    }
+    if (isTrue(record.allow_reg) || isTrue(record.third_party_reg) || Boolean(stringValue(record.reg_url).trim())) return 'Registration available';
+    return 'No signup listed';
+  }
   if (/registration (?:is )?required|must register|pre-?registration required/.test(lower)) return 'Registration required';
   if (/register|registration|sign.?up|rsvp|recdesk/.test(lower)) return 'Registration available';
   return startLocal ? 'Check official listing' : 'See official listing';
@@ -267,6 +350,20 @@ function haversineMiles(lat: number, lng: number) {
   const dLng = radians(lng - ZIP_CENTER.lng);
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(radians(ZIP_CENTER.lat)) * Math.cos(radians(lat)) * Math.sin(dLng / 2) ** 2;
   return 3958.8 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function libraryBranchContext(feed: FeedConfig, labels: string[]) {
+  if (!feed.branchRules?.length) return { distance: feed.distance, address: feed.address };
+  const normalizedLabels = labels.map((label) => label.toLowerCase());
+  const matches = feed.branchRules.filter((rule) => normalizedLabels.some((label) => label.includes(rule.match.toLowerCase())));
+  if (!matches.length) return feed.strictBranchDistance ? null : { distance: feed.distance, address: feed.address };
+  const nearby = matches.filter((rule) => rule.distance <= 15).sort((a, b) => a.distance - b.distance);
+  if (!nearby.length) return null;
+  const closest = nearby[0];
+  return {
+    distance: closest.distance,
+    address: labels.length > 1 && feed.multiBranchAddress ? feed.multiBranchAddress : closest.address,
+  };
 }
 
 function normalizeLibraryCalendar(record: UnknownRecord, feed: FeedConfig, start: string, end: string): LiveEvent | null {
@@ -282,7 +379,10 @@ function normalizeLibraryCalendar(record: UnknownRecord, feed: FeedConfig, start
   const audience = deriveAudience(title, fullDescription, labels, feed.sourceKind);
   if (!audience.include) return null;
   const category = deriveCategory(`${title} ${fullDescription} ${objectNames(record.program_type).join(' ')}`);
-  const branch = objectNames(record.branch)[0] ?? '';
+  const branches = objectNames(record.branch);
+  const branchContext = libraryBranchContext(feed, branches);
+  if (!branchContext) return null;
+  const branch = branches.join(' · ');
   const room = objectNames(record.room)[0] ?? '';
   const venue = [branch, room].filter(Boolean).join(' · ') || feed.name;
   const offsite = plainText(record.offsite_address ?? record.online_address);
@@ -299,8 +399,8 @@ function normalizeLibraryCalendar(record: UnknownRecord, feed: FeedConfig, start
     source: feed.name,
     sourceKind: feed.sourceKind,
     venue,
-    address: offsite || feed.address,
-    distance: feed.distance,
+    address: offsite || branchContext.address,
+    distance: branchContext.distance,
     ages: audience.ages,
     teenOnly: audience.teenOnly,
     family: audience.family,
@@ -308,6 +408,48 @@ function normalizeLibraryCalendar(record: UnknownRecord, feed: FeedConfig, start
     description,
     registrationStatus,
     registrationUrl: url,
+    url,
+    scheduleNotice: scheduleNotice(`${title} ${fullDescription}`),
+  };
+}
+
+function normalizeCommunico(record: UnknownRecord, feed: FeedConfig, start: string, end: string): LiveEvent | null {
+  if (isTrue(record.private_event)) return null;
+  const startLocal = toLocalIso(record.event_start ?? record.raw_start_time);
+  const endLocal = toLocalIso(record.event_end ?? record.raw_end_time) || undefined;
+  const dateKey = startLocal.slice(0, 10);
+  if (!startLocal || dateKey < start || dateKey >= end) return null;
+  const title = plainText(record.title) || 'Untitled event';
+  const fullDescription = plainText(`${stringValue(record.sub_title)} ${stringValue(record.description)} ${stringValue(record.long_description)} ${stringValue(record.changed_reason)}`);
+  const description = compactDescription(fullDescription);
+  const labels = [...objectNames(record.agesArray ?? record.ages), ...objectNames(record.tagsArray ?? record.tags), ...objectNames(record.search_tagsArray ?? record.search_tags)];
+  const audience = deriveAudience(title, fullDescription, labels, feed.sourceKind);
+  if (!audience.include) return null;
+  const url = cleanUrl(record.url, feed.endpoint) || feed.endpoint;
+  const registrationUrl = cleanUrl(record.reg_url, url) || registrationLink(record.long_description, record.reg_url, url);
+  const venue = [plainText(record.venue_name), plainText(record.venue_room)].filter(Boolean).join(' · ')
+    || plainText(record.location ?? record.library)
+    || feed.name;
+  const allDay = startLocal.endsWith('T00:00:00') && Boolean(endLocal?.endsWith('T23:59:59'));
+  return {
+    id: `${feed.id}-${stringValue(record.id ?? record.recurring_id) || `${dateKey}-${title}`}`,
+    title,
+    startLocal,
+    endLocal,
+    dateKey,
+    allDay,
+    source: feed.name,
+    sourceKind: feed.sourceKind,
+    venue,
+    address: feed.address,
+    distance: feed.distance,
+    ages: audience.ages,
+    teenOnly: audience.teenOnly,
+    family: audience.family,
+    ...deriveCategory(`${title} ${fullDescription} ${labels.join(' ')}`),
+    description,
+    registrationStatus: registrationState(record, fullDescription, startLocal, feed.type),
+    registrationUrl,
     url,
     scheduleNotice: scheduleNotice(`${title} ${fullDescription}`),
   };
@@ -359,6 +501,208 @@ function normalizeTribe(record: UnknownRecord, feed: FeedConfig, start: string, 
     description,
     registrationStatus,
     registrationUrl: registrationLink(rawDescription, record.website, url),
+    url,
+    scheduleNotice: scheduleNotice(`${title} ${fullDescription}`),
+  };
+}
+
+function xmlRawValue(block: string, tag: string) {
+  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return block.match(new RegExp(`<${escaped}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${escaped}>`, 'i'))?.[1] ?? '';
+}
+
+function unwrapXmlValue(value: string) {
+  return value.replace(/^<!\[CDATA\[/i, '').replace(/\]\]>$/i, '').trim();
+}
+
+function xmlText(block: string, tag: string) {
+  return plainText(unwrapXmlValue(xmlRawValue(block, tag)));
+}
+
+function xmlTexts(block: string, tag: string) {
+  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return [...block.matchAll(new RegExp(`<${escaped}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${escaped}>`, 'gi'))]
+    .map((match) => plainText(unwrapXmlValue(match[1])))
+    .filter(Boolean);
+}
+
+function parseRssItems(text: string) {
+  return text.match(/<item(?:\s[^>]*)?>[\s\S]*?<\/item>/gi) ?? [];
+}
+
+function twelveHourClock(hourValue: string, minuteValue: string | undefined, periodValue: string) {
+  let hour = Number(hourValue);
+  const period = periodValue.toLowerCase();
+  if (period === 'p' && hour !== 12) hour += 12;
+  if (period === 'a' && hour === 12) hour = 0;
+  return `${String(hour).padStart(2, '0')}:${minuteValue ?? '00'}:00`;
+}
+
+function rssEventTimes(description: string, pubDate: string) {
+  const months: Record<string, string> = {
+    january: '01', february: '02', march: '03', april: '04', may: '05', june: '06',
+    july: '07', august: '08', september: '09', october: '10', november: '11', december: '12',
+  };
+  const date = description.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),\s+(\d{4})\b/i);
+  const times = [...description.matchAll(/\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?\b/gi)];
+  if (date && times.length) {
+    const dateKey = `${date[3]}-${months[date[1].toLowerCase()]}-${date[2].padStart(2, '0')}`;
+    return {
+      startLocal: `${dateKey}T${twelveHourClock(times[0][1], times[0][2], times[0][3])}`,
+      endLocal: times[1] ? `${dateKey}T${twelveHourClock(times[1][1], times[1][2], times[1][3])}` : undefined,
+      allDay: false,
+    };
+  }
+  const instant = Date.parse(pubDate);
+  return {
+    startLocal: Number.isNaN(instant) ? '' : instantToChicagoLocal(instant),
+    endLocal: undefined,
+    allDay: false,
+  };
+}
+
+function normalizeRss(item: string, feed: FeedConfig, start: string, end: string): LiveEvent | null {
+  const title = xmlText(item, 'title') || 'Untitled event';
+  const rawDescription = unwrapXmlValue(xmlRawValue(item, 'description'));
+  const fullDescription = plainText(rawDescription);
+  const times = rssEventTimes(fullDescription, xmlText(item, 'pubDate'));
+  const dateKey = times.startLocal.slice(0, 10);
+  if (!times.startLocal || dateKey < start || dateKey >= end) return null;
+  const labels = xmlTexts(item, 'category');
+  const audience = deriveAudience(title, fullDescription, labels, feed.sourceKind);
+  if (!audience.include) return null;
+  const url = cleanUrl(xmlText(item, 'link'), feed.endpoint) || feed.endpoint;
+  const segments = rawDescription.split(/<br\s*\/?\s*>/gi).map((segment) => plainText(segment)).filter(Boolean);
+  const venue = segments[1] || feed.name;
+  const address = segments.length > 2 ? segments.slice(2).join(', ') : feed.address;
+  return {
+    id: `${feed.id}-${xmlText(item, 'guid') || `${dateKey}-${title}`}`,
+    title,
+    startLocal: times.startLocal,
+    endLocal: times.endLocal,
+    dateKey,
+    allDay: times.allDay,
+    source: feed.name,
+    sourceKind: feed.sourceKind,
+    venue,
+    address,
+    distance: feed.distance,
+    ages: audience.ages,
+    teenOnly: audience.teenOnly,
+    family: audience.family,
+    ...deriveCategory(`${title} ${fullDescription} ${labels.join(' ')}`),
+    description: compactDescription(fullDescription),
+    registrationStatus: registrationState({}, fullDescription, times.startLocal, feed.type),
+    registrationUrl: registrationLink(rawDescription, '', url),
+    url,
+    scheduleNotice: scheduleNotice(`${title} ${fullDescription}`),
+  };
+}
+
+function normalizeBibliocommons(item: string, feed: FeedConfig, start: string, end: string): LiveEvent | null {
+  const startValue = xmlText(item, 'bc:start_date_local');
+  const endValue = xmlText(item, 'bc:end_date_local');
+  const startLocal = toLocalIso(startValue);
+  const endLocal = toLocalIso(endValue) || undefined;
+  const dateKey = startLocal.slice(0, 10);
+  if (!startLocal || dateKey < start || dateKey >= end) return null;
+  const title = xmlText(item, 'title') || 'Untitled event';
+  const rawDescription = unwrapXmlValue(xmlRawValue(item, 'description'));
+  const fullDescription = plainText(rawDescription);
+  const labels = xmlTexts(item, 'category');
+  const audience = deriveAudience(title, fullDescription, labels, feed.sourceKind);
+  if (!audience.include) return null;
+  const location = xmlRawValue(item, 'bc:location');
+  const virtual = xmlText(item, 'bc:is_virtual').toLowerCase() === 'true';
+  const lat = Number(xmlText(location, 'bc:latitude'));
+  const lng = Number(xmlText(location, 'bc:longitude'));
+  let distance = feed.distance;
+  if (!virtual && Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0) {
+    distance = haversineMiles(lat, lng);
+    if (distance > 15) return null;
+  }
+  const locationName = xmlText(location, 'bc:name');
+  const address = virtual
+    ? 'Online event'
+    : [xmlText(location, 'bc:number'), xmlText(location, 'bc:street'), xmlText(location, 'bc:city'), xmlText(location, 'bc:state'), xmlText(location, 'bc:zip')].filter(Boolean).join(' ') || feed.address;
+  const url = cleanUrl(xmlText(item, 'link'), feed.endpoint) || feed.endpoint;
+  const registration = xmlRawValue(item, 'bc:registration_info');
+  const registrationRequired = xmlText(registration, 'bc:is_required').toLowerCase() === 'true';
+  const registrationFull = xmlText(registration, 'bc:is_full').toLowerCase() === 'true';
+  const cancelled = xmlText(item, 'bc:is_cancelled').toLowerCase() === 'true';
+  return {
+    id: `${feed.id}-${xmlText(item, 'guid') || `${dateKey}-${title}`}`,
+    title,
+    startLocal,
+    endLocal,
+    dateKey,
+    allDay: /^\d{4}-\d{2}-\d{2}$/.test(startValue),
+    source: feed.name,
+    sourceKind: feed.sourceKind,
+    venue: virtual ? 'Online event' : locationName || feed.name,
+    address,
+    distance,
+    ages: audience.ages,
+    teenOnly: audience.teenOnly,
+    family: audience.family,
+    ...deriveCategory(`${title} ${fullDescription} ${labels.join(' ')}`),
+    description: compactDescription(fullDescription),
+    registrationStatus: registrationFull ? 'Registration closed / waitlist' : registrationRequired ? 'Registration required' : 'No signup listed',
+    registrationUrl: url,
+    url,
+    scheduleNotice: cancelled ? 'Cancellation notice — check the official listing' : scheduleNotice(`${title} ${fullDescription}`),
+  };
+}
+
+function normalizeMyCalendar(record: UnknownRecord, feed: FeedConfig, start: string, end: string): LiveEvent | null {
+  if (isFalse(record.event_status) || isFalse(record.event_approved)) return null;
+  const startLocal = toLocalIso(record.occur_begin ?? record.event_begin);
+  const endLocal = toLocalIso(record.occur_end ?? record.event_end) || undefined;
+  const dateKey = startLocal.slice(0, 10);
+  if (!startLocal || dateKey < start || dateKey >= end) return null;
+  const title = plainText(record.event_title) || 'Untitled event';
+  const rawDescription = `${stringValue(record.event_desc)} ${stringValue(record.event_short)} ${stringValue(record.event_registration)} ${stringValue(record.event_tickets)}`;
+  const fullDescription = plainText(rawDescription);
+  const labels = [plainText(record.category_name), ...objectNames(record.categories)].filter(Boolean);
+  const audience = deriveAudience(title, fullDescription, labels, feed.sourceKind);
+  if (!audience.include) return null;
+  const location = record.location && typeof record.location === 'object' && !Array.isArray(record.location)
+    ? record.location as UnknownRecord
+    : {};
+  const venue = plainText(location.location_label ?? record.event_label) || feed.name;
+  const suppliedAddress = [
+    location.location_street ?? record.event_street,
+    location.location_street2 ?? record.event_street2,
+    location.location_city ?? record.event_city,
+    location.location_state ?? record.event_state,
+    location.location_postcode ?? record.event_postcode,
+  ].map(plainText).filter(Boolean).join(', ');
+  const eventId = stringValue(record.occur_id ?? record.event_id);
+  const fallbackUrl = new URL('/', feed.endpoint);
+  if (eventId) fallbackUrl.searchParams.set('mc_id', eventId);
+  const url = cleanUrl(record.event_url ?? record.event_link, feed.endpoint) || fallbackUrl.toString();
+  const registrationUrl = registrationLink(rawDescription, record.event_registration ?? record.event_tickets, url);
+  const allDay = stringValue(record.event_time) === '00:00:00'
+    && (stringValue(record.event_endtime) === '23:59:59' || Boolean(endLocal?.endsWith('T23:59:59')));
+  return {
+    id: `${feed.id}-${eventId || `${dateKey}-${title}`}`,
+    title,
+    startLocal,
+    endLocal,
+    dateKey,
+    allDay,
+    source: feed.name,
+    sourceKind: feed.sourceKind,
+    venue,
+    address: suppliedAddress || feed.address,
+    distance: feed.distance,
+    ages: audience.ages,
+    teenOnly: audience.teenOnly,
+    family: audience.family,
+    ...deriveCategory(`${title} ${fullDescription} ${labels.join(' ')}`),
+    description: compactDescription(fullDescription),
+    registrationStatus: registrationState(record, fullDescription, startLocal, feed.type),
+    registrationUrl,
     url,
     scheduleNotice: scheduleNotice(`${title} ${fullDescription}`),
   };
@@ -501,8 +845,21 @@ function normalizeSquarespace(record: UnknownRecord, feed: FeedConfig, start: st
 }
 
 async function fetchWithTimeout(url: string) {
+  let referer = '';
+  try {
+    referer = `${new URL(url).origin}/`;
+  } catch {
+    // The fetch below will surface an invalid URL with the same source context.
+  }
   const response = await fetch(url, {
-    headers: { Accept: 'application/json, text/calendar;q=0.9, text/plain;q=0.8', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36' },
+    headers: {
+      Accept: 'application/json, text/calendar;q=0.9, application/rss+xml;q=0.8, application/xml;q=0.8, text/plain;q=0.7',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/151.0 Safari/537.36',
+      ...(referer ? { Referer: referer } : {}),
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'same-origin',
+    },
     signal: AbortSignal.timeout(12000),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -532,6 +889,89 @@ async function fetchFeed(feed: FeedConfig, start: string, end: string) {
     return records.filter((record): record is UnknownRecord => Boolean(record && typeof record === 'object')).map((record) => normalizeSquarespace(record, feed, start, end)).filter((event): event is LiveEvent => Boolean(event));
   }
 
+  if (feed.type === 'communico') {
+    const endpoint = new URL(feed.endpoint);
+    const startInstant = Date.parse(`${start}T00:00:00Z`);
+    const endInstant = Date.parse(`${end}T00:00:00Z`);
+    const windowDays = Math.max(1, Math.ceil((endInstant - startInstant) / 86_400_000) + 1);
+    endpoint.searchParams.set('event_type', '0');
+    endpoint.searchParams.set('req', JSON.stringify({ private: false, date: start, days: windowDays }));
+    const response = await fetchWithTimeout(endpoint.toString());
+    const payload = await response.json() as unknown;
+    const records = Array.isArray(payload)
+      ? payload
+      : payload && typeof payload === 'object' && Array.isArray((payload as UnknownRecord).events)
+        ? (payload as UnknownRecord).events as unknown[]
+        : [];
+    return records
+      .filter((record): record is UnknownRecord => Boolean(record && typeof record === 'object'))
+      .map((record) => normalizeCommunico(record, feed, start, end))
+      .filter((event): event is LiveEvent => Boolean(event));
+  }
+
+  if (feed.type === 'rss') {
+    const response = await fetchWithTimeout(feed.endpoint);
+    const xml = await response.text();
+    if (!/<rss\b|<feed\b/i.test(xml)) throw new Error('Invalid RSS response');
+    return parseRssItems(xml)
+      .map((item) => normalizeRss(item, feed, start, end))
+      .filter((event): event is LiveEvent => Boolean(event));
+  }
+
+  if (feed.type === 'bibliocommons') {
+    const endpoint = new URL(feed.endpoint);
+    const items: string[] = [];
+    const seen = new Set<string>();
+    for (let page = 1; page <= (feed.maxPages ?? 1); page += 1) {
+      endpoint.searchParams.set('page', String(page));
+      const response = await fetchWithTimeout(endpoint.toString());
+      const xml = await response.text();
+      if (!/<rss\b/i.test(xml)) throw new Error('Invalid BiblioCommons RSS response');
+      const pageItems = parseRssItems(xml);
+      if (!pageItems.length) break;
+      let newItems = 0;
+      for (const item of pageItems) {
+        const key = xmlText(item, 'guid') || item;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        items.push(item);
+        newItems += 1;
+      }
+      if (!newItems) break;
+      const latestDate = pageItems.reduce((latest, item) => {
+        const date = xmlText(item, 'bc:start_date_local').slice(0, 10);
+        return date > latest ? date : latest;
+      }, '');
+      if (latestDate >= end) break;
+    }
+    return items
+      .map((item) => normalizeBibliocommons(item, feed, start, end))
+      .filter((event): event is LiveEvent => Boolean(event));
+  }
+
+  if (feed.type === 'mycalendar') {
+    const response = await fetchWithTimeout(feed.endpoint);
+    const payload = await response.json() as unknown;
+    const containers = Array.isArray(payload)
+      ? payload
+      : payload && typeof payload === 'object'
+        ? Object.values(payload as UnknownRecord)
+        : [];
+    const records = containers.flatMap((value) => Array.isArray(value) ? value : [value]);
+    const seen = new Set<string>();
+    return records
+      .filter((record): record is UnknownRecord => Boolean(record && typeof record === 'object' && 'event_title' in record))
+      .filter((record) => {
+        const key = `${stringValue(record.occur_id ?? record.event_id)}|${stringValue(record.occur_begin ?? record.event_begin)}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((record) => normalizeMyCalendar(record, feed, start, end))
+      .filter((event): event is LiveEvent => Boolean(event));
+  }
+
+  if (feed.type !== 'tribe') throw new Error(`Unsupported feed type: ${feed.type}`);
   const endpoint = new URL(feed.endpoint);
   endpoint.searchParams.set('start_date', `${start} 00:00:00`);
   endpoint.searchParams.set('end_date', `${end} 00:00:00`);

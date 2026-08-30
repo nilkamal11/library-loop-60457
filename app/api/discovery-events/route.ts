@@ -101,14 +101,14 @@ function audienceFor(record: UnknownRecord) {
     || namedAudience.includes('volunteen')
     || /\b(?:for teens?|teens? only|high school students?)\b/.test(lower);
   const includesNine = matchingAges.some((candidate) => candidate.min <= 9 && candidate.max >= 9);
-  const teenOnly = (matchingAges.length > 0 && matchingAges.every((candidate) => candidate.min >= 13))
+  const teenOnly = (matchingAges.length > 0 && matchingAges.every((candidate) => candidate.min >= 12))
     || (!includesNine && namedTeen);
   const youngOnly = /\b(?:newborns?|infants?|bab(?:y|ies)|toddlers?|tots?|preschool(?:ers)?|early childhood|little ones?|birth\s*(?:-|to|through)\s*[0-6])\b/.test(lower);
   const youngOnlyTitle = /\b(?:bab(?:y|ies)|toddlers?|preschool(?:ers)?|lapsit|early childhood)\b|little wigglers|wiggle\s*(?:&|and)\s*wobble/.test(title.toLowerCase())
     && !/baby shark/.test(title.toLowerCase());
   const adultOnly = /\badults? only\b|\b21\s*\+|\b18\s*(?:\+|and (?:up|older))|\bseniors?\b/.test(lower)
     && !/\bchildren|kids?|youth|teens?|tweens?|family|all ages\b/.test(lower);
-  const administrative = /\b(board|committee|commission) meetings?\b|public hearing|meeting minutes|staff training/.test(lower);
+  const administrative = /\b(board|committee|commission) meetings?\b|public hearing|meeting minutes|staff training|\b(?:library|branch|building)\s+(?:is\s+)?closed\b|holiday hours/.test(lower);
   const falseFamilyMatch = /\bfounding families\b|\bfamily (?:history|records|genealogy)\b/.test(lower);
   const adultProgram = /\b(?:ceramics open studio|forest bathing|medicare|retirement|blood pressure|resume review|business networking)\b/.test(lower)
     && !/\b(?:kids?|children|youth|teens?|tweens?)\b/.test(title.toLowerCase());

@@ -79,9 +79,9 @@ function audience(title: string, description: string, labels: string[], sourceKi
     const selected = matching.find((candidate) => candidate.min < 13) ?? matching[0];
     if (!selected) return { include: false, ages: '', teenOnly: false, family: false };
     const includesNine = matching.some((candidate) => candidate.min <= 9 && candidate.max >= 9);
-    return { include: true, ages: selected.label, teenOnly: matching.every((candidate) => candidate.min >= 13) || (!includesNine && namedTeen), family };
+    return { include: true, ages: selected.label, teenOnly: matching.every((candidate) => candidate.min >= 12) || (!includesNine && namedTeen), family };
   }
-  if (/\badults? only\b|\b18\s*\+|\bseniors?\b|\btoddlers?\b|\bpreschool/.test(lower)) return { include: false, ages: '', teenOnly: false, family: false };
+  if (/\badults? only\b|\b18\s*\+|\bseniors?\b|\btoddlers?\b|\bpreschool|\b(?:library|branch|building)\s+(?:is\s+)?closed\b|holiday hours/.test(lower)) return { include: false, ages: '', teenOnly: false, family: false };
   if (/\bteens?|tweens?|middle school|high school/.test(lower)) return { include: true, ages: labels.find((label) => /teen|tween/i.test(label)) ?? 'Teens / tweens', teenOnly: namedTeen || (!family && !/\bchildren|kids?|elementary|school[- ]age\b/.test(lower) && /\bteens?|high school\b/.test(lower)), family };
   if (family) return { include: true, ages: 'Family / all ages', teenOnly: false, family: true };
   if (/\bchildren|child(?:ren)?|kids?|youth|school[- ]age/.test(lower)) return { include: true, ages: labels.find((label) => /child|kid|youth/i.test(label)) ?? 'Kids / youth', teenOnly: false, family };
