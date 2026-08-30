@@ -12,6 +12,7 @@ import {
   type EventsResponse,
   type LiveEvent,
 } from '@/lib/live-event';
+import { fetchBrowserOnlyEvents, mergeBrowserEvents } from '@/lib/browser-only-feeds';
 
 const categoryCycle = ['All types', 'Make', 'Build', 'Play', 'Read', 'Create', 'Outdoor', 'Music', 'Explore'];
 
@@ -47,13 +48,15 @@ export default function Home() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/events?start=${weekStart}&days=7`, { signal: controller.signal })
-      .then((response) => {
+    Promise.all([
+      fetch(`/api/events?start=${weekStart}&days=7&feed_version=3`, { signal: controller.signal }).then((response) => {
         if (!response.ok) throw new Error('Event refresh failed');
         return response.json() as Promise<EventsResponse>;
-      })
-      .then((nextData) => {
-        setData(nextData);
+      }),
+      fetchBrowserOnlyEvents(weekStart, controller.signal),
+    ])
+      .then(([serverData, browserData]) => {
+        setData(mergeBrowserEvents(serverData, browserData));
         setLoadState('ready');
       })
       .catch((error: unknown) => {
