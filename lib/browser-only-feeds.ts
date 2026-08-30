@@ -13,7 +13,6 @@ type BrowserFeed = {
 
 const browserFeeds: BrowserFeed[] = [
   { id: 'worth-browser', name: 'Worth Public Library District', endpoint: 'https://www.worthlibrary.com/wp-json/tribe/events/v1/events', sourceKind: 'Library', distance: 3.02, address: '6917 W 111th St, Worth, IL 60482' },
-  { id: 'posen-browser', name: 'Posen Park District', endpoint: 'https://posenparkdistrict.org/wp-json/tribe/events/v1/events', sourceKind: 'Park district', distance: 9, address: '14300 S Campbell Ave, Posen, IL 60469' },
 ];
 
 function stringValue(value: unknown) {
