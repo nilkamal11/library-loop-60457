@@ -8,8 +8,10 @@ const weekDays = [
   },
   {
     day: 'Sunday', date: 'Aug 30', events: [
+      { time: '9:00 AM', title: 'Happy Hummingbirds', library: 'Forest Preserves · Sagawau', ages: 'Family', distance: '5.6 mi', tone: 'blue' },
       { time: '11:00 AM', title: 'Sunday Family Stories', library: 'Palos Heights Public Library', ages: 'Family', distance: '4.5 mi', tone: 'gold' },
       { time: '2:00 PM', title: 'Young Artists Studio', library: 'Bridgeview Public Library', ages: 'Ages 7–12', distance: '1.8 mi', tone: 'coral' },
+      { time: '6:00 PM', title: 'Summer Concert on the Green', library: 'Oak Lawn Park District', ages: 'Family', distance: '4.0 mi', tone: 'gold' },
     ],
   },
   { day: 'Monday', date: 'Aug 31', events: [{ time: '4:00 PM', title: 'After-School Chess Club', library: 'Worth Public Library District', ages: 'Grades 3–8', distance: '3.0 mi', tone: 'blue' }] },
@@ -40,14 +42,14 @@ export default function WeekPage() {
         <div className="sidebar-spacer" />
         <section className="coverage-card" aria-label="Week coverage">
           <p className="eyebrow">This example week</p><strong>{eventCount} events</strong>
-          <p>Across 11 nearby libraries<br />for ages 7–16 + family</p>
+          <p>Across 13 nearby organizations<br />for ages 7–16 + family</p>
           <div className="coverage-meter connected"><span /></div><small>Within the 15 mile search</small>
         </section>
       </aside>
 
       <section className="workspace week-workspace">
         <header className="topbar">
-          <div><p className="eyebrow">August 29–September 4</p><h1>Week at a glance.</h1><p className="lede">A seven-day view of nearby library events for kids ages 7–16.</p></div>
+          <div><p className="eyebrow">August 29–September 4</p><h1>Week at a glance.</h1><p className="lede">A seven-day view of nearby library, park, and nature events for kids ages 7–16.</p></div>
           <div className="location-button" aria-label="Search location"><span className="location-dot" aria-hidden="true" /> 60457</div>
         </header>
 

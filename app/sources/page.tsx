@@ -142,9 +142,14 @@ export default function SourcesPage() {
 
       <section className="workspace sources-workspace">
         <header className="topbar sources-topbar">
-          <div><p className="eyebrow">Calendar connections · 15 miles from 60457</p><h1>What we can reach.</h1><p className="lede">Every public-library system in scope, with the collection method we found for its events calendar.</p></div>
+          <div><p className="eyebrow">Library calendars · 15 miles from 60457</p><h1>Libraries we can reach.</h1><p className="lede">Every public-library system in scope, with the collection method found for its events calendar.</p></div>
           <a className="back-button" href="/">← Back to planner</a>
         </header>
+
+        <nav className="source-tabs" aria-label="Calendar source type">
+          <a className="active" href="/sources" aria-current="page"><span aria-hidden="true">▤</span><strong>Libraries</strong><small>75 sources</small></a>
+          <a href="/sources/parks"><span aria-hidden="true">♧</span><strong>Parks & nature</strong><small>61 sources</small></a>
+        </nav>
 
         <section className="source-metrics" aria-label="Calendar source totals">
           {(Object.keys(statusDetails) as SourceStatus[]).map((status) => (

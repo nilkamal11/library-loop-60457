@@ -25,8 +25,10 @@ const eventSets: EventItem[][] = [
     { time:'3:00',period:'PM',duration:'2 hrs',title:'Teen Dungeons & Dragons',library:'Chicago Public Library · Clearing',distance:4.4,ages:'Ages 13–17',tone:'plum',mark:'PLAY',category:'Play',family:false,address:'6423 W 63rd Pl, Chicago' },
   ],
   [
+    { time:'9:00',period:'AM',duration:'Drop in',title:'Happy Hummingbirds',library:'Forest Preserves of Cook County · Sagawau',distance:5.6,ages:'Family',tone:'blue',mark:'EXPLORE',category:'Outdoor',family:true,address:'12545 W 111th St, Lemont' },
     { time:'11:00',period:'AM',duration:'45 min',title:'Sunday Family Stories',library:'Palos Heights Public Library',distance:4.5,ages:'Family',tone:'gold',mark:'READ',category:'Read',family:true,address:'12501 S 71st Ave, Palos Heights' },
     { time:'2:00',period:'PM',duration:'60 min',title:'Young Artists Studio',library:'Bridgeview Public Library',distance:1.8,ages:'Ages 7–12',tone:'coral',mark:'CREATE',category:'Create',family:false,address:'7840 W 79th St, Bridgeview' },
+    { time:'6:00',period:'PM',duration:'2 hrs',title:'Summer Concert on the Green',library:'Oak Lawn Park District · Village Green',distance:4.0,ages:'Family',tone:'gold',mark:'LISTEN',category:'Music',family:true,address:'9446 S Raymond Ave, Oak Lawn' },
   ],
   [{ time:'4:00',period:'PM',duration:'60 min',title:'After-School Chess Club',library:'Worth Public Library District',distance:3.0,ages:'Grades 3–8',tone:'blue',mark:'PLAY',category:'Play',family:false,address:'6917 W 111th St, Worth' }],
   [{ time:'6:00',period:'PM',duration:'75 min',title:'Family Science Night',library:'Prairie Trails Public Library District',distance:3.1,ages:'Family',tone:'gold',mark:'DISCOVER',category:'Make',family:true,address:'8449 S Moody Ave, Burbank' }],
@@ -38,7 +40,7 @@ const eventSets: EventItem[][] = [
   [{ time:'3:30',period:'PM',duration:'60 min',title:'Coding for Curious Kids',library:'Indian Prairie Public Library District',distance:6.9,ages:'Ages 9–13',tone:'blue',mark:'BUILD',category:'Build',family:false,address:'401 Plainfield Rd, Darien' }],
 ];
 
-const categoryCycle = ['All types', 'Make', 'Build', 'Play', 'Read', 'Create'];
+const categoryCycle = ['All types', 'Make', 'Build', 'Play', 'Read', 'Create', 'Outdoor', 'Music'];
 
 export default function Home() {
   const [selectedDate, setSelectedDate] = useState(0);
@@ -67,14 +69,14 @@ export default function Home() {
         <div className="sidebar-spacer" />
         <section className="coverage-card" id="sources" aria-label="Search coverage">
           <p className="eyebrow">Search coverage</p><strong>15 mile radius</strong>
-          <p>75 library systems<br />132 physical branches</p>
-          <div className="coverage-meter connected"><span /></div><small>65 calendars ready to automate</small>
+          <p>75 library systems<br />61 park & nature calendars</p>
+          <div className="coverage-meter expanded"><span /></div><small>120 calendars ready to automate</small>
         </section>
       </aside>
 
       <section className="workspace">
         <header className="topbar">
-          <div><p className="eyebrow">{dates[selectedDate].label}</p><h1>{dates[selectedDate].day} library events.</h1><p className="lede">For kids ages 7–16, within 15 miles of 60457.</p></div>
+          <div><p className="eyebrow">{dates[selectedDate].label}</p><h1>{dates[selectedDate].day} events nearby.</h1><p className="lede">Library, park district, and forest preserve events for kids ages 7–16.</p></div>
           <button className="location-button" type="button" title="The starting ZIP for this dashboard"><span className="location-dot" aria-hidden="true" /> 60457 <span aria-hidden="true">⌄</span></button>
         </header>
 
@@ -135,8 +137,8 @@ export default function Home() {
             <aside className="day-summary" id="map">
               <div className="summary-art" aria-hidden="true"><span>15</span><small>MILES</small></div>
               <p className="eyebrow">Your search</p><h2>One useful calendar,<br />not 75 browser tabs.</h2>
-              <p>We’ll combine nearby library calendars, keep events that welcome ages 7–16, and link every listing back to its source.</p>
-              <dl><div><dt>Area</dt><dd>60457 + 15 mi</dd></div><div><dt>Ages</dt><dd>7–16 + family</dd></div><div><dt>Libraries</dt><dd>75 systems</dd></div></dl>
+              <p>We’ll combine nearby library, park district, and forest preserve calendars, keep events that welcome ages 7–16, and link every listing back to its source.</p>
+              <dl><div><dt>Area</dt><dd>60457 + 15 mi</dd></div><div><dt>Ages</dt><dd>7–16 + family</dd></div><div><dt>Sources</dt><dd>136 calendars</dd></div></dl>
             </aside>
           )}
         </div>
