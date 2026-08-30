@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 
-const siteUrl = process.env.SITE_URL ?? 'http://localhost:3000';
+const siteUrl = 'https://library-loop-60457.nilkamals463352.chatgpt.site';
 
 export const metadata: Metadata = {
   title: 'Library Loop — Kids Library Events Near 60457',
