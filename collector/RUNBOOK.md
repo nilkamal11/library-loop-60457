@@ -6,8 +6,8 @@ The collector uses conservative JSON-LD and semantic DOM extraction. It does not
 
 ## What is included
 
-- `sources.mjs` contains the 16 current `page` and `manual` libraries from `app/sources/page.tsx`, using only URLs verified in the follow-up source audit.
-- All 16 sources are in the overnight browser queue. Chicago Public Library is intentionally excluded because its verified, audience-filtered BiblioCommons RSS belongs in the normal direct-feed path.
+- `sources.mjs` contains the 17 current `page` and `manual` libraries from `app/sources/page.tsx`, using only URLs verified in the follow-up source audit.
+- All 17 sources are in the overnight browser queue. Forest Park is included because its official calendar opens in a normal browser but blocks the hosted runtime. Chicago Public Library is intentionally excluded because its verified, audience-filtered BiblioCommons RSS belongs in the normal direct-feed path.
 - `run.mjs` collects sources sequentially, normalizes child/family/teen events, and writes an exact ingest batch plus a separate audit record.
 - `upload.mjs` signs and uploads a validated batch.
 - `tests/` covers source routing, robots behavior, normalization, teen classification, payload validation, and signing.

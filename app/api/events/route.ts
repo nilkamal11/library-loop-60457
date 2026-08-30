@@ -67,7 +67,6 @@ const feeds: FeedConfig[] = [
   { id: 'calumet-park-library', name: 'Calumet Park Public Library', endpoint: 'https://cpplibrary.org/wp-json/my-calendar/v1/events', type: 'mycalendar', sourceKind: 'Library', distance: 9.77, address: '1500 W 127th St, Calumet Park, IL 60827' },
   { id: 'lemont-library', name: 'Lemont Public Library District', endpoint: 'https://lemontlibrary.libnet.info/eeventcaldata', type: 'communico', sourceKind: 'Library', distance: 10.04, address: '50 E Wend St, Lemont, IL 60439' },
   { id: 'homer-township-library', name: 'Homer Township Public Library District', endpoint: 'https://www.homerlibrary.org/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 10.42, address: '14320 W 151st St, Homer Glen, IL 60491' },
-  { id: 'forest-park-library', name: 'Forest Park Public Library', endpoint: 'https://cc.fppl.org/events/categories/forest-park-public-library/feed/', type: 'rss', sourceKind: 'Library', distance: 10.53, address: '7555 Jackson Blvd, Forest Park, IL 60130' },
   { id: 'oak-park-library', name: 'Oak Park Public Library', endpoint: 'https://oakpark.librarycalendar.com/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 10.54, address: '845 S Gunderson Ave, Oak Park, IL 60304', multiBranchAddress: 'Multiple Oak Park Public Library locations; see official listing', branchRules: [
     { match: 'Maze Branch Library', distance: 10.54, address: '845 S Gunderson Ave, Oak Park, IL 60304' },
     { match: 'Main Library', distance: 11.52, address: '834 Lake St, Oak Park, IL 60301' },

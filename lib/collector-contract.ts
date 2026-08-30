@@ -30,6 +30,7 @@ export const OVERNIGHT_SOURCE_IDS = new Set([
   'crestwood-public-library',
   'la-grange-park-public-library',
   'william-leonard-public-library',
+  'forest-park-public-library',
   'bellwood-public-library',
   'maywood-public-library',
   'markham-public-library',

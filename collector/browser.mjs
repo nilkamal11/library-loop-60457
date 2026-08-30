@@ -175,6 +175,39 @@ async function extractDomCandidates(page) {
       output.push({ extractionMethod: 'semantic-dom', title, start, end, url, registrationUrl: url, description, venue, address, text: allText });
       if (output.length >= 150) break;
     }
+
+    // Forest Park's official community calendar renders a simple semantic list
+    // instead of Event schema. Convert only its explicit, unambiguous date/time
+    // pattern to local ISO values; ambiguous list items stay out of the upload.
+    const monthNumbers = new Map([
+      ['january', '01'], ['february', '02'], ['march', '03'], ['april', '04'],
+      ['may', '05'], ['june', '06'], ['july', '07'], ['august', '08'],
+      ['september', '09'], ['october', '10'], ['november', '11'], ['december', '12'],
+    ]);
+    const localTime = (hourText, minuteText, meridiem) => {
+      let hour = Number(hourText);
+      if (meridiem.toLowerCase() === 'pm' && hour !== 12) hour += 12;
+      if (meridiem.toLowerCase() === 'am' && hour === 12) hour = 0;
+      return `${String(hour).padStart(2, '0')}:${minuteText}:00`;
+    };
+    for (const node of document.querySelectorAll('main article li')) {
+      const link = node.querySelector(':scope > a[href*="/events/"]');
+      const title = text(link);
+      const allText = text(node);
+      const match = allText.match(/-\s*([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})\s*-\s*(\d{1,2}):(\d{2})\s*(am|pm)\s*-\s*(\d{1,2}):(\d{2})\s*(am|pm)/i);
+      const month = match ? monthNumbers.get(match[1].toLowerCase()) : '';
+      if (!link || !title || !match || !month) continue;
+      const day = match[2].padStart(2, '0');
+      const date = `${match[3]}-${month}-${day}`;
+      const start = `${date}T${localTime(match[4], match[5], match[6])}`;
+      const end = `${date}T${localTime(match[7], match[8], match[9])}`;
+      const url = link.href;
+      const key = `${title.toLowerCase()}|${start}|${url}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      output.push({ extractionMethod: 'dated-event-list', title, start, end, url, registrationUrl: url, description: allText, venue: '', address: '', text: allText });
+      if (output.length >= 150) break;
+    }
     return output;
   });
 }
