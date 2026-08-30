@@ -33,7 +33,7 @@ const feeds: FeedConfig[] = [
   { id: 'thomas-ford', name: 'Thomas Ford Memorial Library', endpoint: 'https://www.fordlibrary.org/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 7.1, address: '800 Chestnut St, Western Springs, IL 60558' },
   { id: 'orland-park-library', name: 'Orland Park Public Library', endpoint: 'https://orlandpark.librarycalendar.com/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 7.39, address: '14921 S Ravinia Ave, Orland Park, IL 60462' },
   { id: 'bridgeview', name: 'Bridgeview Public Library', endpoint: 'https://bridgeviewlibrary.org/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Library', distance: 1.81, address: '7840 W 79th St, Bridgeview, IL 60455' },
-  { id: 'worth', name: 'Worth Public Library District', endpoint: 'https://www.worthlibrary.com/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Library', distance: 3.02, address: '6917 W 111th St, Worth, IL 60482' },
+  { id: 'worth', name: 'Worth Public Library District', endpoint: 'https://www.worthlibrary.com/calendar/list/?ical=1', type: 'civicplus', sourceKind: 'Library', distance: 3.02, address: '6917 W 111th St, Worth, IL 60482' },
   { id: 'mccook', name: 'McCook Public Library District', endpoint: 'https://mccook.lib.il.us/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Library', distance: 5.29, address: '8419 W 50th St, McCook, IL 60525' },
   { id: 'fpdcc', name: 'Forest Preserves of Cook County', endpoint: 'https://fpdcc.com/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Forest preserve', distance: 15, address: 'Venue varies', venueDistance: true, maxPages: 3 },
   { id: 'chicago-ridge-parks', name: 'Chicago Ridge Park District', endpoint: 'https://chicagoridgeparks.com/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Park district', distance: 3, address: '10736 Lombard Ave, Chicago Ridge, IL 60415' },
@@ -55,7 +55,7 @@ const feeds: FeedConfig[] = [
   { id: 'burbank-parks', name: 'Burbank Park District', endpoint: 'https://www.burbankil.gov/common/modules/iCalendar/iCalendar.aspx?catID=29&feed=calendar', type: 'civicplus', sourceKind: 'Park district', distance: 4.7, address: '6100 W 85th St, Burbank, IL 60459', detailBase: 'https://www.burbankil.gov/calendar.aspx?EID=' },
   { id: 'palos-park-rec', name: 'Palos Park Recreation & Parks', endpoint: 'https://www.palospark.org/common/modules/iCalendar/iCalendar.aspx?catID=30&feed=calendar', type: 'civicplus', sourceKind: 'Recreation', distance: 7.5, address: '8901 W 123rd St, Palos Park, IL 60464', detailBase: 'https://www.palospark.org/calendar.aspx?EID=' },
   { id: 'north-riverside-rec', name: 'North Riverside Parks & Recreation', endpoint: 'https://www.northriverside-il.org/common/modules/iCalendar/iCalendar.aspx?catID=24&feed=calendar', type: 'civicplus', sourceKind: 'Recreation', distance: 8.5, address: '2401 S Des Plaines Ave, North Riverside, IL 60546', detailBase: 'https://www.northriverside-il.org/calendar.aspx?EID=' },
-  { id: 'posen-parks', name: 'Posen Park District', endpoint: 'https://posenparkdistrict.org/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Park district', distance: 9, address: '14300 S Campbell Ave, Posen, IL 60469' },
+  { id: 'posen-parks', name: 'Posen Park District', endpoint: 'https://posenparkdistrict.org/?post_type=tribe_events&ical=1&eventDisplay=list', type: 'civicplus', sourceKind: 'Park district', distance: 9, address: '14300 S Campbell Ave, Posen, IL 60469' },
   { id: 'forest-park-parks', name: 'Forest Park Park District', endpoint: 'https://www.pdofp.org/events?format=json', type: 'squarespace', sourceKind: 'Park district', distance: 10.5, address: '7501 Harrison St, Forest Park, IL 60130' },
   { id: 'maywood-parks', name: 'Maywood Park District', endpoint: 'https://www.maywoodparkdistrict.org/2026-calendar?format=json', type: 'squarespace', sourceKind: 'Park district', distance: 11.3, address: '921 S 9th Ave, Maywood, IL 60153' },
   { id: 'lisle-parks', name: 'Lisle Park District', endpoint: 'https://www.calendarwiz.com/CalendarWiz_iCal.php?crd=lisleparkdistrict', type: 'civicplus', sourceKind: 'Park district', distance: 13.2, address: '1925 Ohio St, Lisle, IL 60532', icsUtc: true },
@@ -390,9 +390,10 @@ function normalizeIcs(record: Record<string, string>, feed: FeedConfig, start: s
   const rawIcsDescription = `${stringValue(record.DESCRIPTION)} ${stringValue(record['X-ALT-DESC'])}`;
   const fullDescription = plainText(rawIcsDescription);
   const description = compactDescription(fullDescription);
-  const audience = deriveAudience(title, fullDescription, [], feed.sourceKind);
+  const labels = stringValue(record.CATEGORIES).split(',').map((label) => plainText(label)).filter(Boolean);
+  const audience = deriveAudience(title, fullDescription, labels, feed.sourceKind);
   if (!audience.include) return null;
-  const category = deriveCategory(`${title} ${fullDescription}`);
+  const category = deriveCategory(`${title} ${fullDescription} ${labels.join(' ')}`);
   const uid = stringValue(record.UID);
   const eid = uid.match(/\d+/)?.[0] ?? uid;
   const constructed = feed.detailBase && eid ? `${feed.detailBase}${encodeURIComponent(eid)}` : '';
