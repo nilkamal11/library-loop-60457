@@ -34,7 +34,13 @@ const feeds: FeedConfig[] = [
   { id: 'orland-park-library', name: 'Orland Park Public Library', endpoint: 'https://orlandpark.librarycalendar.com/events/feed/json', type: 'librarycalendar', sourceKind: 'Library', distance: 7.39, address: '14921 S Ravinia Ave, Orland Park, IL 60462' },
   { id: 'bridgeview', name: 'Bridgeview Public Library', endpoint: 'https://bridgeviewlibrary.org/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Library', distance: 1.81, address: '7840 W 79th St, Bridgeview, IL 60455' },
   { id: 'mccook', name: 'McCook Public Library District', endpoint: 'https://mccook.lib.il.us/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Library', distance: 5.29, address: '8419 W 50th St, McCook, IL 60525' },
+  { id: 'indian-prairie-library', name: 'Indian Prairie Public Library District', endpoint: 'https://ippl.libcal.com/ical_subscribe.php?src=p&cid=9323', type: 'civicplus', sourceKind: 'Library', distance: 6.88, address: '401 Plainfield Rd, Darien, IL 60561', icsUtc: true },
+  { id: 'north-riverside-library', name: 'North Riverside Public Library District', endpoint: 'https://www.nrpl.info/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Library', distance: 8.47, address: '2400 S Des Plaines Ave, North Riverside, IL 60546' },
+  { id: 'acorn-library', name: 'Acorn Public Library District', endpoint: 'https://acornlibrary.org/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Library', distance: 8.89, address: '15624 Central Ave, Oak Forest, IL 60452' },
+  { id: 'westmont-library', name: 'Westmont Public Library', endpoint: 'https://westmontlibrary.libcal.com/ical_subscribe.php?src=p&cid=21445', type: 'civicplus', sourceKind: 'Library', distance: 9.44, address: '428 N Cass Ave, Westmont, IL 60559', icsUtc: true },
   { id: 'fpdcc', name: 'Forest Preserves of Cook County', endpoint: 'https://fpdcc.com/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Forest preserve', distance: 15, address: 'Venue varies', venueDistance: true, maxPages: 3 },
+  { id: 'lake-katherine', name: 'Lake Katherine Nature Center', endpoint: 'https://www.lakekatherine.org/common/modules/iCalendar/iCalendar.aspx?catID=14&feed=calendar', type: 'civicplus', sourceKind: 'Forest preserve', distance: 3.6, address: '7402 Lake Katherine Dr, Palos Heights, IL 60463', detailBase: 'https://www.lakekatherine.org/calendar.aspx?EID=' },
+  { id: 'western-springs-community', name: 'Western Springs Community Events', endpoint: 'https://www.wsprings.com/common/modules/iCalendar/iCalendar.aspx?catID=14&feed=calendar', type: 'civicplus', sourceKind: 'Recreation', distance: 7.8, address: 'Western Springs, IL 60558', detailBase: 'https://www.wsprings.com/calendar.aspx?EID=' },
   { id: 'chicago-ridge-parks', name: 'Chicago Ridge Park District', endpoint: 'https://chicagoridgeparks.com/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Park district', distance: 3, address: '10736 Lombard Ave, Chicago Ridge, IL 60415' },
   { id: 'summit-parks', name: 'Summit Park District', endpoint: 'https://summitparks.org/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Park district', distance: 4, address: '5700 S Archer Rd, Summit, IL 60501' },
   { id: 'oak-lawn-parks', name: 'Oak Lawn Park District', endpoint: 'https://www.olparks.com/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Park district', distance: 4, address: '9401 S Oak Park Ave, Oak Lawn, IL 60453' },
@@ -116,6 +122,9 @@ function isFalse(value: unknown) {
 
 function explicitAge(text: string) {
   const candidates: Array<{ min: number; max: number; label: string }> = [];
+  for (const exactYears of text.matchAll(/\b(?:ages?|age)\s*:?\s*(\d{1,2})\s*(?:yrs?|years?)?\s*(?:[-–—]|to|through)\s*(\d{1,2})\s*(?:yrs?|years?)\b/gi)) {
+    candidates.push({ min: Number(exactYears[1]), max: Number(exactYears[2]), label: `Ages ${exactYears[1]}–${exactYears[2]}` });
+  }
   for (const exact of text.matchAll(/\b(?:ages?|age)\s*:?\s*(\d{1,2})\s*(?:[-–—]|to|through)\s*(\d{1,2})\b/gi)) {
     candidates.push({ min: Number(exact[1]), max: Number(exact[2]), label: `Ages ${exact[1]}–${exact[2]}` });
   }
@@ -147,7 +156,7 @@ function deriveAudience(title: string, description: string, labels: string[], so
   const adultActivity = /\b(bodypump|cycle|cycling|spin|nia|foam rolling|werq|zumba|pilates|barre|yoga|cardio|aerobics|fitness class|workout|strength training|pickleball|golf league|softball league)\b/.test(lower);
   const adultProgram = /\b(adults?|lapidary|lunch\s*(?:&|and)\s*learn|independent housing|retirement|medicare|matinee|provider training|staff training|certification)\b/.test(lower);
   const notAnEvent = /\b(?:pool|office|village hall|facility|building)\s+(?:is\s+)?closed\b|\bclosed\s+(?:august|september|october|november|december|january|february|march|april|may|june|july)|delayed opening|holiday hours/.test(lower);
-  const generalPublicActivity = /\b(concert|festival|fair|market|hike|walk|nature|hummingbirds?|birds?|bones?|kayak|open mic|improv|spray pad|swim|skate|climb|ceramics|arts?|craft|story|show|garage sale|touch-a-truck|yappy|wildlife|music|bingo|movie|theat(?:er|re)|audition|health fair|dance|holiday|celebration|workshop)\b/.test(lower);
+  const generalPublicActivity = /\b(concert|festival|fest|fair|market|hike|walk|nature|hummingbirds?|birds?|bones?|kayak|open mic|improv|spray pad|swim|skate|climb|ceramics|arts?|craft|story|show|garage sale|touch-a-truck|yappy|wildlife|music|bingo|movie|theat(?:er|re)|audition|health fair|dance|holiday|celebration|workshop)\b/.test(lower);
   if (administrative || notAnEvent || (adultOnly && !age) || ((adultActivity || adultProgram) && !age && !teen && !youth && !familyNamed)) return { include: false, ages: '', family: false };
   if (age) return { include: age.min <= 16 && age.max >= 7, ages: age.label, family };
   if (teen) return { include: true, ages: labels.find((label) => /teen|tween/i.test(label)) ?? 'Teens / tweens', family };

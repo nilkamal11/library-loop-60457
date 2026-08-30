@@ -149,7 +149,8 @@ export default function SourcesPage() {
 
         <nav className="source-tabs" aria-label="Calendar source type">
           <a className="active" href="/sources" aria-current="page"><span aria-hidden="true">▤</span><strong>Libraries</strong><small>75 sources</small></a>
-          <a href="/sources/parks"><span aria-hidden="true">♧</span><strong>Parks & nature</strong><small>61 sources</small></a>
+          <a href="/sources/parks"><span aria-hidden="true">♧</span><strong>Parks & nature</strong><small>62 sources</small></a>
+          <a href="/sources/guides"><span aria-hidden="true">☆</span><strong>Family guides</strong><small>8 sources</small></a>
         </nav>
 
         <section className="source-metrics" aria-label="Calendar source totals">

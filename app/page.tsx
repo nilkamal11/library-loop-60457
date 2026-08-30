@@ -12,7 +12,8 @@ import {
   type EventsResponse,
   type LiveEvent,
 } from '@/lib/live-event';
-import { fetchBrowserOnlyEvents, mergeBrowserEvents } from '@/lib/browser-only-feeds';
+import { fetchBrowserOnlyEvents, mergeEventSources } from '@/lib/browser-only-feeds';
+import { fetchDiscoveryEvents } from '@/lib/discovery-events';
 
 const categoryCycle = ['All types', 'Make', 'Build', 'Play', 'Read', 'Create', 'Outdoor', 'Music', 'Explore'];
 
@@ -49,14 +50,15 @@ export default function Home() {
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([
-      fetch(`/api/events?start=${weekStart}&days=7&feed_version=3`, { signal: controller.signal }).then((response) => {
+      fetch(`/api/events?start=${weekStart}&days=7&feed_version=6`, { signal: controller.signal }).then((response) => {
         if (!response.ok) throw new Error('Event refresh failed');
         return response.json() as Promise<EventsResponse>;
       }),
       fetchBrowserOnlyEvents(weekStart, controller.signal),
+      fetchDiscoveryEvents(weekStart, controller.signal),
     ])
-      .then(([serverData, browserData]) => {
-        setData(mergeBrowserEvents(serverData, browserData));
+      .then(([serverData, browserData, discoveryData]) => {
+        setData(mergeEventSources(serverData, browserData, discoveryData));
         setLoadState('ready');
       })
       .catch((error: unknown) => {
@@ -98,7 +100,7 @@ export default function Home() {
     ? 'Checking official calendars and registration links…'
     : loadState === 'error'
       ? 'The live refresh did not finish. Try again shortly or open Calendar sources for the official pages.'
-      : `${sourceStatus?.connected ?? 0} of ${sourceStatus?.attempted ?? 0} structured calendars responded · refreshed ${updatedLabel(data?.updatedAt)} CT`;
+      : `${sourceStatus?.connected ?? 0} of ${sourceStatus?.attempted ?? 0} live sources responded · refreshed ${updatedLabel(data?.updatedAt)} CT`;
 
   return (
     <main className="app-shell">
@@ -114,7 +116,7 @@ export default function Home() {
         <section className="coverage-card" aria-label="Live feed coverage">
           <p className="eyebrow">Live feed check</p>
           <strong>{sourceStatus ? `${sourceStatus.connected} of ${sourceStatus.attempted}` : 'Connecting…'}</strong>
-          <p>Structured library, park, recreation, and nature calendars</p>
+          <p>Official calendars plus permitted family-event discovery</p>
           <div className={`coverage-meter ${loadState === 'ready' ? 'connected' : ''}`}><span /></div>
           <small>{sourceStatus ? `${sourceStatus.empty} connected calendars have no matching events this week` : 'Official listings are being checked'}</small>
         </section>
@@ -122,7 +124,7 @@ export default function Home() {
 
       <section className="workspace">
         <header className="topbar">
-          <div><p className="eyebrow">{dates[selectedDate].label}</p><h1>{dates[selectedDate].day} events nearby.</h1><p className="lede">Live library, park district, recreation, and forest preserve events for kids ages 7–16.</p></div>
+          <div><p className="eyebrow">{dates[selectedDate].label}</p><h1>{dates[selectedDate].day} events nearby.</h1><p className="lede">Live library, park, nature, and family-guide discoveries for kids ages 7–16.</p></div>
           <button className="location-button" type="button" title="The starting ZIP for this calendar"><span className="location-dot" aria-hidden="true" /> 60457 <span aria-hidden="true">15 mi</span></button>
         </header>
 
@@ -178,7 +180,7 @@ export default function Home() {
           {selectedEvent ? (
             <aside className="detail-panel" aria-live="polite">
               <button className="close-button" onClick={() => setSelectedEvent(null)} type="button" aria-label="Close event details">×</button>
-              <p className="eyebrow">{selectedEvent.sourceKind} · official live listing</p><h2>{selectedEvent.title}</h2>
+              <p className="eyebrow">{selectedEvent.sourceKind === 'Family guide' ? 'Family guide discovery · organizer link' : `${selectedEvent.sourceKind} · official live listing`}</p><h2>{selectedEvent.title}</h2>
               <div className="detail-tags"><span>{selectedEvent.ages}</span><span>{formatDuration(selectedEvent)}</span></div>
               {selectedEvent.scheduleNotice && <div className="schedule-warning">{selectedEvent.scheduleNotice}</div>}
               <dl>
@@ -196,7 +198,7 @@ export default function Home() {
             <aside className="day-summary">
               <div className="summary-art" aria-hidden="true"><span>15</span><small>MILES</small></div>
               <p className="eyebrow">Live calendar area</p><h2>Nearby events from official sources.</h2>
-              <p>Events are pulled from public calendars, matched to ages 7–16 and family audiences, and linked back to the organizer for signup and current availability.</p>
+              <p>Events are pulled from official calendars and permitted family guides, matched to ages 7–16, and linked back to the organizer for signup and current availability.</p>
               <dl><div><dt>Area</dt><dd>60457 + 15 mi</dd></div><div><dt>Ages</dt><dd>7–16 + family</dd></div><div><dt>Feeds responding</dt><dd>{sourceStatus ? `${sourceStatus.connected}/${sourceStatus.attempted}` : 'Checking'}</dd></div></dl>
             </aside>
           )}

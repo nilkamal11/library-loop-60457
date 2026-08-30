@@ -23,6 +23,7 @@ const parkSources: ParkSource[] = [
   { name: 'Worth Park District', distance: '≈3 mi', status: 'page', method: 'Vermont Systems WebTrac', note: 'Structured calendar pages can be extracted; no public feed was found.', url: 'https://rectrac.worthparkdistrict.org/wbwsc/webtrac.wsc/search.html?display=Calendar&module=Event' },
   { name: 'Palos Hills Resource & Recreation', distance: '≈3 mi', status: 'page', method: 'Web page + seasonal PDF', note: 'Recreation schedules are primarily published in brochures and city listings.', url: 'https://www.paloshills-il.gov/index.php/departments/parks-recreation/index.html' },
   { name: 'Bedford Park District', distance: '≈3.5 mi', status: 'feed', method: 'CivicPlus iCalendar', note: 'Category feeds cover the main calendar and open gym.', url: 'https://www.bedfordparkdistrict.org/calendar.aspx' },
+  { name: 'Lake Katherine Nature Center', distance: '≈3.6 mi', status: 'feed', method: 'CivicPlus iCalendar', note: 'Official nature-center feed includes youth, school-day, camp, and family events with organizer details.', url: 'https://www.lakekatherine.org/166/Special-Events' },
   { name: 'Hodgkins Park District', distance: '≈3.5 mi', status: 'page', method: 'Web page + PDF', note: 'Special events are published as pages and flyers.', url: 'https://hodgkinspark.org/events' },
   { name: 'Summit Park District', distance: '≈4 mi', status: 'feed', method: 'WordPress Events API + iCalendar', note: 'The feed works but is currently empty; freshness will be monitored.', url: 'https://summitparks.org/events/' },
   { name: 'Oak Lawn Park District', distance: '≈4 mi', status: 'feed', method: 'WordPress Events API + iCalendar', note: 'Structured current event feed; sports schedules are kept separate.', url: 'https://www.olparks.com/events' },
@@ -36,7 +37,7 @@ const parkSources: ParkSource[] = [
   { name: 'Park District of La Grange', distance: '6.5–7.5 mi', status: 'page', method: 'Event tiles + registration pages', note: 'Event tiles are readable, with occasional image text.', url: 'https://pdlg.org/new-events' },
   { name: 'Palos Park Recreation & Parks', distance: '7–8 mi', status: 'feed', method: 'CivicPlus iCalendar', note: 'Special-events category feed is available.', url: 'https://www.palospark.org/calendar.aspx?CID=30' },
   { name: 'Community Park District of La Grange Park', distance: '7–8 mi', status: 'page', method: 'Structured homepage events', note: 'Current listings can be extracted from the official site.', url: 'https://www.communityparkdistrict.org/' },
-  { name: 'Western Springs Recreation Department', distance: '7.5–8.5 mi', status: 'page', method: 'RecDesk calendar', note: 'Borderline by venue; events will be distance-checked individually.', url: 'https://wsprings.recdesk.com/Community/Calendar' },
+  { name: 'Western Springs Recreation Department', distance: '7.5–8.5 mi', status: 'feed', method: 'CivicPlus iCalendar + RecDesk', note: 'Official community-event feed now captures family festivals; program registration remains on RecDesk.', url: 'https://www.wsprings.com/calendar.aspx?CID=14' },
   { name: 'Alsip Park District', distance: '7–8 mi', status: 'page', method: 'WordPress calendar page', note: 'Usable page with an added freshness check for older listings.', url: 'https://www.alsipparks.org/calendar-of-events/' },
   { name: 'Darien Park District', distance: '8.5–9 mi', status: 'page', method: 'Vermont Systems WebTrac', note: 'Server-rendered event calendar can be extracted.', url: 'https://registration.darienparks.com/webtrac/web/search.html?display=Calendar&module=Event' },
   { name: 'Clarendon Hills Park District', distance: '≈8.3 mi', status: 'page', method: 'Vermont Systems WebTrac', note: 'Server-rendered event calendar can be extracted.', url: 'https://ilclarendonhillsweb.myvscloud.com/webtrac/web/search.html?display=Calendar&module=Event' },
@@ -136,6 +137,7 @@ export default function ParkSourcesPage() {
         <nav className="source-tabs" aria-label="Calendar source type">
           <a href="/sources"><span aria-hidden="true">▤</span><strong>Libraries</strong><small>75 sources</small></a>
           <a className="active" href="/sources/parks" aria-current="page"><span aria-hidden="true">♧</span><strong>Parks & nature</strong><small>{parkSources.length} sources</small></a>
+          <a href="/sources/guides"><span aria-hidden="true">☆</span><strong>Family guides</strong><small>8 sources</small></a>
         </nav>
 
         <section className="source-metrics" aria-label="Park and nature calendar source totals">

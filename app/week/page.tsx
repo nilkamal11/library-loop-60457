@@ -9,7 +9,8 @@ import {
   makeDateStrip,
   type EventsResponse,
 } from '@/lib/live-event';
-import { fetchBrowserOnlyEvents, mergeBrowserEvents } from '@/lib/browser-only-feeds';
+import { fetchBrowserOnlyEvents, mergeEventSources } from '@/lib/browser-only-feeds';
+import { fetchDiscoveryEvents } from '@/lib/discovery-events';
 
 export default function WeekPage() {
   const [weekStart, setWeekStart] = useState(chicagoTodayKey);
@@ -20,14 +21,15 @@ export default function WeekPage() {
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([
-      fetch(`/api/events?start=${weekStart}&days=7&feed_version=3`, { signal: controller.signal }).then((response) => {
+      fetch(`/api/events?start=${weekStart}&days=7&feed_version=6`, { signal: controller.signal }).then((response) => {
         if (!response.ok) throw new Error('Event refresh failed');
         return response.json() as Promise<EventsResponse>;
       }),
       fetchBrowserOnlyEvents(weekStart, controller.signal),
+      fetchDiscoveryEvents(weekStart, controller.signal),
     ])
-      .then(([serverData, browserData]) => {
-        setData(mergeBrowserEvents(serverData, browserData));
+      .then(([serverData, browserData, discoveryData]) => {
+        setData(mergeEventSources(serverData, browserData, discoveryData));
         setLoadState('ready');
       })
       .catch((error: unknown) => {
@@ -68,14 +70,14 @@ export default function WeekPage() {
         <div className="sidebar-spacer" />
         <section className="coverage-card" aria-label="Live week coverage">
           <p className="eyebrow">This live week</p><strong>{loadState === 'loading' ? 'Checking…' : `${eventCount} events`}</strong>
-          <p>{sourceStatus ? `${sourceStatus.connected} structured calendars responded` : 'Official calendars are loading'}<br />for ages 7–16 + family</p>
+          <p>{sourceStatus ? `${sourceStatus.connected} live sources responded` : 'Nearby sources are loading'}<br />for ages 7–16 + family</p>
           <div className={`coverage-meter ${loadState === 'ready' ? 'connected' : ''}`}><span /></div><small>Within the 15 mile search</small>
         </section>
       </aside>
 
       <section className="workspace week-workspace">
         <header className="topbar">
-          <div><p className="eyebrow">{dates[0].shortLabel}–{dates[6].shortLabel}</p><h1>Week at a glance.</h1><p className="lede">Live nearby library, park, recreation, and nature events with official detail and signup links.</p></div>
+          <div><p className="eyebrow">{dates[0].shortLabel}–{dates[6].shortLabel}</p><h1>Week at a glance.</h1><p className="lede">Official calendars plus permitted family-event discoveries, all linked back to the organizer.</p></div>
           <div className="week-controls" aria-label="Change week">
             <button onClick={() => changeWeek(-1)} type="button" aria-label="Previous week">‹</button>
             <span><i className="location-dot" aria-hidden="true" /> 60457</span>
@@ -87,7 +89,7 @@ export default function WeekPage() {
           <span>{loadState === 'ready' ? 'Live feeds' : loadState === 'error' ? 'Refresh issue' : 'Connecting'}</span>
           {loadState === 'loading' && 'Checking official calendars and signup links…'}
           {loadState === 'error' && 'The live refresh did not finish. Try again shortly.'}
-          {loadState === 'ready' && `${sourceStatus?.connected ?? 0} of ${sourceStatus?.attempted ?? 0} structured calendars responded. Select any event to open its official listing.`}
+          {loadState === 'ready' && `${sourceStatus?.connected ?? 0} of ${sourceStatus?.attempted ?? 0} live sources responded. Select any event to open its official listing.`}
         </div>
 
         {loadState === 'loading' ? (

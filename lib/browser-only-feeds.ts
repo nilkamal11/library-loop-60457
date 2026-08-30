@@ -163,21 +163,47 @@ export async function fetchBrowserOnlyEvents(start: string, externalSignal?: Abo
   };
 }
 
-export function mergeBrowserEvents(server: EventsResponse, browser: Awaited<ReturnType<typeof fetchBrowserOnlyEvents>>): EventsResponse {
-  const deduped = new Map<string, LiveEvent>();
-  for (const event of [...server.events, ...browser.events]) {
-    const key = `${event.title.toLowerCase()}|${event.startLocal}|${event.source.toLowerCase()}`;
-    if (!deduped.has(key)) deduped.set(key, event);
+type EventSupplement = Pick<EventsResponse, 'events' | 'sourceStatus'>;
+
+function canonicalEventUrl(event: LiveEvent) {
+  for (const value of [event.url, event.registrationUrl]) {
+    try {
+      const url = new URL(value);
+      url.hash = '';
+      for (const key of [...url.searchParams.keys()]) {
+        if (/^(?:utm_.+|fbclid|gclid)$/i.test(key)) url.searchParams.delete(key);
+      }
+      if (url.pathname !== '/' && !/\/(?:events?|calendar)\/?$/i.test(url.pathname)) return `${url.origin}${url.pathname}${url.search}`.toLowerCase();
+    } catch {
+      // Ignore malformed optional URLs and fall back to the event identity below.
+    }
   }
+  return '';
+}
+
+export function mergeEventSources(server: EventsResponse, ...supplements: EventSupplement[]): EventsResponse {
+  const deduped = new Map<string, LiveEvent>();
+  const seenOfficialUrls = new Set<string>();
+  for (const event of [server, ...supplements].flatMap((source) => source.events)) {
+    const officialUrl = canonicalEventUrl(event);
+    const urlKey = officialUrl ? `${officialUrl}|${event.dateKey}` : '';
+    if (urlKey && seenOfficialUrls.has(urlKey)) continue;
+    const key = `${event.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${event.startLocal}|${event.venue.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}`;
+    if (!deduped.has(key)) deduped.set(key, event);
+    if (urlKey) seenOfficialUrls.add(urlKey);
+  }
+  const statuses = [server.sourceStatus, ...supplements.map((source) => source.sourceStatus)];
   return {
     ...server,
     events: [...deduped.values()].sort((a, b) => a.startLocal.localeCompare(b.startLocal) || a.distance - b.distance),
     sourceStatus: {
-      attempted: server.sourceStatus.attempted + browser.sourceStatus.attempted,
-      connected: server.sourceStatus.connected + browser.sourceStatus.connected,
-      empty: server.sourceStatus.empty + browser.sourceStatus.empty,
-      failed: server.sourceStatus.failed + browser.sourceStatus.failed,
-      failedSources: [...server.sourceStatus.failedSources, ...browser.sourceStatus.failedSources],
+      attempted: statuses.reduce((sum, status) => sum + status.attempted, 0),
+      connected: statuses.reduce((sum, status) => sum + status.connected, 0),
+      empty: statuses.reduce((sum, status) => sum + status.empty, 0),
+      failed: statuses.reduce((sum, status) => sum + status.failed, 0),
+      failedSources: statuses.flatMap((status) => status.failedSources),
     },
   };
 }
+
+export const mergeBrowserEvents = (server: EventsResponse, browser: EventSupplement) => mergeEventSources(server, browser);

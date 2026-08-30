@@ -1,4 +1,4 @@
-export type SourceKind = 'Library' | 'Park district' | 'Forest preserve' | 'Recreation';
+export type SourceKind = 'Library' | 'Park district' | 'Forest preserve' | 'Recreation' | 'Family guide';
 
 export type LiveEvent = {
   id: string;
