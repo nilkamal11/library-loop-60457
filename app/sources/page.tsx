@@ -128,8 +128,8 @@ export default function SourcesPage() {
         <a className="brand brand-link" href="/"><span className="brand-mark" aria-hidden="true">L</span><span>Library Loop</span></a>
         <nav className="nav" aria-label="Main navigation">
           <a className="nav-link" href="/"><span aria-hidden="true">▦</span> Day planner</a>
-          <a className="nav-link" href="/#week"><span aria-hidden="true">□</span> Week view</a>
-          <a className="nav-link" href="/#map"><span aria-hidden="true">⌖</span> Library map</a>
+          <a className="nav-link" href="/week"><span aria-hidden="true">□</span> Week view</a>
+          <a className="nav-link" href="/map"><span aria-hidden="true">⌖</span> Library map</a>
           <a className="nav-link active" href="/sources" aria-current="page"><span aria-hidden="true">↻</span> Calendar sources</a>
         </nav>
         <div className="sidebar-spacer" />

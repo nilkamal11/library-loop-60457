@@ -59,9 +59,9 @@ export default function Home() {
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark" aria-hidden="true">L</span><span>Library Loop</span></div>
         <nav className="nav" aria-label="Main navigation">
-          <a className="nav-link active" href="#day"><span aria-hidden="true">▦</span> Day planner</a>
-          <a className="nav-link" href="#week"><span aria-hidden="true">□</span> Week view</a>
-          <a className="nav-link" href="#map"><span aria-hidden="true">⌖</span> Library map</a>
+          <a className="nav-link active" href="/" aria-current="page"><span aria-hidden="true">▦</span> Day planner</a>
+          <a className="nav-link" href="/week"><span aria-hidden="true">□</span> Week view</a>
+          <a className="nav-link" href="/map"><span aria-hidden="true">⌖</span> Library map</a>
           <a className="nav-link" href="/sources"><span aria-hidden="true">↻</span> Calendar sources</a>
         </nav>
         <div className="sidebar-spacer" />
