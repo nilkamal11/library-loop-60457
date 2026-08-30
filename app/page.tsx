@@ -37,6 +37,7 @@ export default function Home() {
   const [weekStart, setWeekStart] = useState(chicagoTodayKey);
   const [selectedDate, setSelectedDate] = useState(0);
   const [includeFamily, setIncludeFamily] = useState(true);
+  const [showTeenEvents, setShowTeenEvents] = useState(false);
   const [radius, setRadius] = useState(15);
   const [category, setCategory] = useState('All types');
   const [selectedEvent, setSelectedEvent] = useState<LiveEvent | null>(null);
@@ -50,7 +51,7 @@ export default function Home() {
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([
-      fetch(`/api/events?start=${weekStart}&days=7&feed_version=6`, { signal: controller.signal }).then((response) => {
+      fetch(`/api/events?start=${weekStart}&days=7&feed_version=7`, { signal: controller.signal }).then((response) => {
         if (!response.ok) throw new Error('Event refresh failed');
         return response.json() as Promise<EventsResponse>;
       }),
@@ -68,21 +69,28 @@ export default function Home() {
     return () => controller.abort();
   }, [weekStart]);
 
+  const ageFilteredEvents = useMemo(() => (data?.events ?? []).filter((event) => showTeenEvents || !event.teenOnly), [data, showTeenEvents]);
+
   const eventCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const event of data?.events ?? []) counts.set(event.dateKey, (counts.get(event.dateKey) ?? 0) + 1);
+    for (const event of ageFilteredEvents) counts.set(event.dateKey, (counts.get(event.dateKey) ?? 0) + 1);
     return counts;
-  }, [data]);
+  }, [ageFilteredEvents]);
 
-  const visibleEvents = useMemo(() => (data?.events ?? []).filter((event) =>
+  const visibleEvents = useMemo(() => ageFilteredEvents.filter((event) =>
     event.dateKey === selectedKey
     && event.distance <= radius
     && (includeFamily || !event.family)
     && (category === 'All types' || event.category === category)
-  ), [data, selectedKey, includeFamily, radius, category]);
+  ), [ageFilteredEvents, selectedKey, includeFamily, radius, category]);
 
   const cycleRadius = () => setRadius((current) => current === 15 ? 5 : current === 5 ? 10 : 15);
   const cycleCategory = () => setCategory((current) => categoryCycle[(categoryCycle.indexOf(current) + 1) % categoryCycle.length]);
+  const toggleTeenEvents = () => {
+    const next = !showTeenEvents;
+    setShowTeenEvents(next);
+    if (!next && selectedEvent?.teenOnly) setSelectedEvent(null);
+  };
   const changeWeek = (amount: number) => {
     setLoadState('loading');
     setData(null);
@@ -124,7 +132,7 @@ export default function Home() {
 
       <section className="workspace">
         <header className="topbar">
-          <div><p className="eyebrow">{dates[selectedDate].label}</p><h1>{dates[selectedDate].day} events nearby.</h1><p className="lede">Live library, park, nature, and family-guide discoveries for kids ages 7–16.</p></div>
+          <div><p className="eyebrow">{dates[selectedDate].label}</p><h1>{dates[selectedDate].day} events nearby.</h1><p className="lede">Live library, park, nature, and family-guide discoveries for kids. Teen-focused listings are optional.</p></div>
           <button className="location-button" type="button" title="The starting ZIP for this calendar"><span className="location-dot" aria-hidden="true" /> 60457 <span aria-hidden="true">15 mi</span></button>
         </header>
 
@@ -141,7 +149,7 @@ export default function Home() {
         </section>
 
         <div className="filters" aria-label="Event filters">
-          <button className="filter-pill active" type="button">Ages 7–16 <span aria-hidden="true">✓</span></button>
+          <button className={`filter-pill ${showTeenEvents ? 'active' : ''}`} aria-pressed={showTeenEvents} onClick={toggleTeenEvents} title="Show or hide teen-focused and high-school events" type="button">Teen events <span>{showTeenEvents ? '×' : '+'}</span></button>
           <button className={`filter-pill ${includeFamily ? 'active' : ''}`} aria-pressed={includeFamily} onClick={() => setIncludeFamily((value) => !value)} type="button">Family & all ages <span>{includeFamily ? '×' : '+'}</span></button>
           <button className="filter-pill" onClick={cycleRadius} type="button">Within {radius} mi <span>⌄</span></button>
           <button className={`filter-pill ${category !== 'All types' ? 'active' : ''}`} onClick={cycleCategory} type="button">{category} <span>⌄</span></button>
@@ -173,7 +181,7 @@ export default function Home() {
                 })}
               </div>
             ) : (
-              <div className="empty-state"><span aria-hidden="true">○</span><h2>No live matches for this day</h2><p>{loadState === 'error' ? 'The feed refresh had a problem. Please try again shortly.' : 'Try another date, widen the distance, or include family events.'}</p></div>
+              <div className="empty-state"><span aria-hidden="true">○</span><h2>No live matches for this day</h2><p>{loadState === 'error' ? 'The feed refresh had a problem. Please try again shortly.' : `Try another date, widen the distance, or ${showTeenEvents ? 'include family events' : 'turn on teen events'}.`}</p></div>
             )}
           </section>
 
@@ -198,8 +206,8 @@ export default function Home() {
             <aside className="day-summary">
               <div className="summary-art" aria-hidden="true"><span>15</span><small>MILES</small></div>
               <p className="eyebrow">Live calendar area</p><h2>Nearby events from official sources.</h2>
-              <p>Events are pulled from official calendars and permitted family guides, matched to ages 7–16, and linked back to the organizer for signup and current availability.</p>
-              <dl><div><dt>Area</dt><dd>60457 + 15 mi</dd></div><div><dt>Ages</dt><dd>7–16 + family</dd></div><div><dt>Feeds responding</dt><dd>{sourceStatus ? `${sourceStatus.connected}/${sourceStatus.attempted}` : 'Checking'}</dd></div></dl>
+              <p>Events are pulled from official calendars and permitted family guides. Teen-focused listings stay hidden unless you turn them on.</p>
+              <dl><div><dt>Area</dt><dd>60457 + 15 mi</dd></div><div><dt>Audience</dt><dd>{showTeenEvents ? 'Kids, family + teens' : 'Kids + family'}</dd></div><div><dt>Feeds responding</dt><dd>{sourceStatus ? `${sourceStatus.connected}/${sourceStatus.attempted}` : 'Checking'}</dd></div></dl>
             </aside>
           )}
         </div>

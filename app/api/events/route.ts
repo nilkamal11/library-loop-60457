@@ -135,9 +135,20 @@ function explicitAge(text: string) {
     const gradeNumber = (entry: string) => entry.toLowerCase() === 'k' ? 0 : Number(entry);
     candidates.push({ min: gradeNumber(grade[1]) + 5, max: gradeNumber(grade[2]) + 6, label: `Grades ${grade[1].toUpperCase()}–${grade[2].toUpperCase()}` });
   }
-  if (candidates.length) return candidates.find((candidate) => candidate.min <= 16 && candidate.max >= 7) ?? candidates[0];
+  if (candidates.length) {
+    const matching = candidates.filter((candidate) => candidate.min <= 16 && candidate.max >= 7);
+    const selected = matching.find((candidate) => candidate.min < 13) ?? matching[0] ?? candidates[0];
+    return {
+      ...selected,
+      includesNine: matching.some((candidate) => candidate.min <= 9 && candidate.max >= 9),
+      teenOnly: matching.length > 0 && matching.every((candidate) => candidate.min >= 13),
+    };
+  }
   const single = text.match(/\b(?:ages?|age)\s*:?\s*(\d{1,2})\b/i);
-  if (single) return { min: Number(single[1]), max: Number(single[1]), label: `Age ${single[1]}` };
+  if (single) {
+    const value = Number(single[1]);
+    return { min: value, max: value, label: `Age ${single[1]}`, includesNine: value === 9, teenOnly: value >= 13 };
+  }
   return null;
 }
 
@@ -148,6 +159,14 @@ function deriveAudience(title: string, description: string, labels: string[], so
   const broadAudienceLabel = labels.some((label) => /^(all|everyone|all ages)$/i.test(label.trim()));
   const family = broadAudienceLabel || /\bfamil(?:y|ies)\b|all ages|all-ages|caregiver|parent(?:s)? and child/.test(lower);
   const familyNamed = broadAudienceLabel || /\bfamil(?:y|ies)\b|caregiver|parent(?:s)? and child/.test(lower);
+  const namedAudience = `${title} ${labels.join(' ')}`.toLowerCase();
+  const namedTeen = /\bteens?|teenagers?|high school|young adults?\b/.test(namedAudience)
+    || namedAudience.includes('diversiteen')
+    || namedAudience.includes('volunteen')
+    || /\b(?:for teens?|teens? only|high school students?)\b/.test(lower);
+  const teenOnly = age
+    ? Boolean(age.teenOnly) || (!age.includesNine && namedTeen)
+    : namedTeen;
   const adultOnly = /\badults? only\b|\b18\s*(?:\+|and (?:up|older))|\b21\s*\+|\bseniors?\b|\b55\s*\+/.test(lower);
   const youngOnly = /\b(?:bab(?:y|ies)|toddlers?|tots?|preschool(?:ers)?|birth\s*(?:-|to|through)\s*5)\b/.test(lower);
   const administrative = /\b(board|committee|commission) meetings?\b|public hearing|bid opening|meeting minutes/.test(lower);
@@ -157,14 +176,14 @@ function deriveAudience(title: string, description: string, labels: string[], so
   const adultProgram = /\b(adults?|lapidary|lunch\s*(?:&|and)\s*learn|independent housing|retirement|medicare|matinee|provider training|staff training|certification)\b/.test(lower);
   const notAnEvent = /\b(?:pool|office|village hall|facility|building)\s+(?:is\s+)?closed\b|\bclosed\s+(?:august|september|october|november|december|january|february|march|april|may|june|july)|delayed opening|holiday hours/.test(lower);
   const generalPublicActivity = /\b(concert|festival|fest|fair|market|hike|walk|nature|hummingbirds?|birds?|bones?|kayak|open mic|improv|spray pad|swim|skate|climb|ceramics|arts?|craft|story|show|garage sale|touch-a-truck|yappy|wildlife|music|bingo|movie|theat(?:er|re)|audition|health fair|dance|holiday|celebration|workshop)\b/.test(lower);
-  if (administrative || notAnEvent || (adultOnly && !age) || ((adultActivity || adultProgram) && !age && !teen && !youth && !familyNamed)) return { include: false, ages: '', family: false };
-  if (age) return { include: age.min <= 16 && age.max >= 7, ages: age.label, family };
-  if (teen) return { include: true, ages: labels.find((label) => /teen|tween/i.test(label)) ?? 'Teens / tweens', family };
-  if (youngOnly) return { include: false, ages: '', family: false };
-  if (family) return { include: true, ages: 'Family / all ages', family: true };
-  if (youth) return { include: true, ages: labels.find((label) => /child|kid|youth/i.test(label)) ?? 'Kids / youth', family };
-  if (sourceKind !== 'Library' && generalPublicActivity) return { include: true, ages: 'Family / age not specified', family: true };
-  return { include: false, ages: '', family: false };
+  if (administrative || notAnEvent || (adultOnly && !age) || ((adultActivity || adultProgram) && !age && !teen && !youth && !familyNamed)) return { include: false, ages: '', teenOnly: false, family: false };
+  if (age) return { include: age.min <= 16 && age.max >= 7, ages: age.label, teenOnly, family };
+  if (teen) return { include: true, ages: labels.find((label) => /teen|tween/i.test(label)) ?? 'Teens / tweens', teenOnly: teenOnly || (!family && !youth && /\bteens?|high school\b/.test(lower)), family };
+  if (youngOnly) return { include: false, ages: '', teenOnly: false, family: false };
+  if (family) return { include: true, ages: 'Family / all ages', teenOnly: false, family: true };
+  if (youth) return { include: true, ages: labels.find((label) => /child|kid|youth/i.test(label)) ?? 'Kids / youth', teenOnly: false, family };
+  if (sourceKind !== 'Library' && generalPublicActivity) return { include: true, ages: 'Family / age not specified', teenOnly: false, family: true };
+  return { include: false, ages: '', teenOnly: false, family: false };
 }
 
 function deriveCategory(text: string) {
@@ -283,6 +302,7 @@ function normalizeLibraryCalendar(record: UnknownRecord, feed: FeedConfig, start
     address: offsite || feed.address,
     distance: feed.distance,
     ages: audience.ages,
+    teenOnly: audience.teenOnly,
     family: audience.family,
     ...category,
     description,
@@ -333,6 +353,7 @@ function normalizeTribe(record: UnknownRecord, feed: FeedConfig, start: string, 
     address,
     distance,
     ages: audience.ages,
+    teenOnly: audience.teenOnly,
     family: audience.family,
     ...category,
     description,
@@ -420,6 +441,7 @@ function normalizeIcs(record: Record<string, string>, feed: FeedConfig, start: s
     address: plainText(record.LOCATION) || feed.address,
     distance: feed.distance,
     ages: audience.ages,
+    teenOnly: audience.teenOnly,
     family: audience.family,
     ...category,
     description,
@@ -467,6 +489,7 @@ function normalizeSquarespace(record: UnknownRecord, feed: FeedConfig, start: st
     address,
     distance,
     ages: audience.ages,
+    teenOnly: audience.teenOnly,
     family: audience.family,
     ...category,
     description,

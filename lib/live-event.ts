@@ -13,6 +13,7 @@ export type LiveEvent = {
   address: string;
   distance: number;
   ages: string;
+  teenOnly: boolean;
   family: boolean;
   category: string;
   tone: string;

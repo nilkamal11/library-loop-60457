@@ -90,11 +90,19 @@ function audienceFor(record: UnknownRecord) {
   const text = `${title} ${description} ${ageRange}`;
   const lower = text.toLowerCase();
   const candidates = ageCandidates(text);
-  const matchingAge = candidates.find((candidate) => candidate.min <= 16 && candidate.max >= 7);
-  if (candidates.length && !matchingAge) return { include: false, ages: '', family: false };
+  const matchingAges = candidates.filter((candidate) => candidate.min <= 16 && candidate.max >= 7);
+  const matchingAge = matchingAges.find((candidate) => candidate.min < 13) ?? matchingAges[0];
+  if (candidates.length && !matchingAge) return { include: false, ages: '', teenOnly: false, family: false };
 
   const family = /\bfamil(?:y|ies)\b|all ages|all-ages|caregiver/.test(lower);
-  const olderYouth = /\bteens?|tweens?|preteens?|middle school|high school|elementary|school[- ]age|grades?\s*[2-9]|youth\b/.test(lower);
+  const namedAudience = `${title} ${ageRange}`.toLowerCase();
+  const namedTeen = /\bteens?|teenagers?|high school|young adults?\b/.test(namedAudience)
+    || namedAudience.includes('diversiteen')
+    || namedAudience.includes('volunteen')
+    || /\b(?:for teens?|teens? only|high school students?)\b/.test(lower);
+  const includesNine = matchingAges.some((candidate) => candidate.min <= 9 && candidate.max >= 9);
+  const teenOnly = (matchingAges.length > 0 && matchingAges.every((candidate) => candidate.min >= 13))
+    || (!includesNine && namedTeen);
   const youngOnly = /\b(?:newborns?|infants?|bab(?:y|ies)|toddlers?|tots?|preschool(?:ers)?|early childhood|little ones?|birth\s*(?:-|to|through)\s*[0-6])\b/.test(lower);
   const youngOnlyTitle = /\b(?:bab(?:y|ies)|toddlers?|preschool(?:ers)?|lapsit|early childhood)\b|little wigglers|wiggle\s*(?:&|and)\s*wobble/.test(title.toLowerCase())
     && !/baby shark/.test(title.toLowerCase());
@@ -105,18 +113,18 @@ function audienceFor(record: UnknownRecord) {
   const adultProgram = /\b(?:ceramics open studio|forest bathing|medicare|retirement|blood pressure|resume review|business networking)\b/.test(lower)
     && !/\b(?:kids?|children|youth|teens?|tweens?)\b/.test(title.toLowerCase());
   if (adultOnly || administrative || falseFamilyMatch || adultProgram || youngOnlyTitle || (youngOnly && !matchingAge)) {
-    return { include: false, ages: '', family: false };
+    return { include: false, ages: '', teenOnly: false, family: false };
   }
-  if (matchingAge) return { include: true, ages: matchingAge.label, family };
-  if (/\bteens?|high school\b/.test(lower)) return { include: true, ages: 'Teens', family };
-  if (/\btweens?|preteens?|middle school\b/.test(lower)) return { include: true, ages: 'Tweens / teens', family };
-  if (family) return { include: true, ages: 'Family / all ages', family: true };
-  if (/\belementary|school[- ]age|children|kids?|youth\b/.test(lower) && !youngOnly) return { include: true, ages: ageRange || 'Kids / youth', family };
+  if (matchingAge) return { include: true, ages: matchingAge.label, teenOnly, family };
+  if (/\bteens?|high school\b/.test(lower)) return { include: true, ages: 'Teens', teenOnly: teenOnly || (!family && !/\bchildren|kids?|elementary|school[- ]age\b/.test(lower)), family };
+  if (/\btweens?|preteens?|middle school\b/.test(lower)) return { include: true, ages: 'Tweens / teens', teenOnly, family };
+  if (family) return { include: true, ages: 'Family / all ages', teenOnly: false, family: true };
+  if (/\belementary|school[- ]age|children|kids?|youth\b/.test(lower) && !youngOnly) return { include: true, ages: ageRange || 'Kids / youth', teenOnly: false, family };
 
   const clearFamilyActivity = /\btouch[ -]a[ -]truck|kids? corner|children'?s activities|family fun|story(?:time|walk)|lego|minecraft|pokemon|junior|youth|parade|movie in the park|zoo|all ages\b/.test(lower);
   return clearFamilyActivity
-    ? { include: true, ages: 'Family / age not specified', family: true }
-    : { include: false, ages: '', family: false };
+    ? { include: true, ages: 'Family / age not specified', teenOnly: false, family: true }
+    : { include: false, ages: '', teenOnly: false, family: false };
 }
 
 function categoryFor(text: string, supplied: unknown) {
@@ -177,6 +185,7 @@ function normalize(record: UnknownRecord, start: string, end: string): LiveEvent
     address: compact(record.address, 180) || 'See official listing',
     distance,
     ages: matchedAudience.ages,
+    teenOnly: matchedAudience.teenOnly,
     family: matchedAudience.family,
     ...categoryFor(`${title} ${descriptionText}`, record.category),
     description,

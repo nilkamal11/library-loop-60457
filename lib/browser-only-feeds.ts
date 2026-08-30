@@ -58,18 +58,35 @@ function audience(title: string, description: string, labels: string[], sourceKi
   const text = `${title} ${description} ${labels.join(' ')}`;
   const lower = text.toLowerCase();
   const family = /\bfamil(?:y|ies)\b|all ages|all-ages/.test(lower) || labels.some((label) => /^(all|everyone)$/i.test(label));
-  const exact = text.match(/\bages?\s*:?\s*(\d{1,2})\s*(?:[-–—]|to|through)\s*(\d{1,2})\b/i);
-  if (exact) return { include: Number(exact[1]) <= 16 && Number(exact[2]) >= 7, ages: `Ages ${exact[1]}–${exact[2]}`, family };
-  const plus = text.match(/\bages?\s*:?\s*(\d{1,2})\s*(?:\+|(?:and|&)\s*(?:up|older)|or older)/i);
-  if (plus) return { include: Number(plus[1]) <= 16, ages: `Ages ${plus[1]}+`, family };
-  const grade = text.match(/\bgrades?\s*:?\s*([kK]|\d{1,2})(?:st|nd|rd|th)?\s*(?:[-–—]|to|through)\s*([kK]|\d{1,2})(?:st|nd|rd|th)?\b/i);
-  if (grade) return { include: true, ages: `Grades ${grade[1].toUpperCase()}–${grade[2].toUpperCase()}`, family };
-  if (/\badults? only\b|\b18\s*\+|\bseniors?\b|\btoddlers?\b|\bpreschool/.test(lower)) return { include: false, ages: '', family: false };
-  if (/\bteens?|tweens?|middle school|high school/.test(lower)) return { include: true, ages: labels.find((label) => /teen|tween/i.test(label)) ?? 'Teens / tweens', family };
-  if (family) return { include: true, ages: 'Family / all ages', family: true };
-  if (/\bchildren|child(?:ren)?|kids?|youth|school[- ]age/.test(lower)) return { include: true, ages: labels.find((label) => /child|kid|youth/i.test(label)) ?? 'Kids / youth', family };
+  const namedAudience = `${title} ${labels.join(' ')}`.toLowerCase();
+  const namedTeen = /\bteens?|teenagers?|high school|young adults?\b/.test(namedAudience)
+    || namedAudience.includes('diversiteen')
+    || namedAudience.includes('volunteen')
+    || /\b(?:for teens?|teens? only|high school students?)\b/.test(lower);
+  const ageCandidates: Array<{ min: number; max: number; label: string }> = [];
+  for (const match of text.matchAll(/\bages?\s*:?\s*(\d{1,2})\s*(?:[-–—]|to|through)\s*(\d{1,2})\b/gi)) {
+    ageCandidates.push({ min: Number(match[1]), max: Number(match[2]), label: `Ages ${match[1]}–${match[2]}` });
+  }
+  for (const match of text.matchAll(/\bages?\s*:?\s*(\d{1,2})\s*(?:\+|(?:and|&)\s*(?:up|older)|or older)/gi)) {
+    ageCandidates.push({ min: Number(match[1]), max: 99, label: `Ages ${match[1]}+` });
+  }
+  for (const match of text.matchAll(/\bgrades?\s*:?\s*([kK]|\d{1,2})(?:st|nd|rd|th)?\s*(?:[-–—]|to|through)\s*([kK]|\d{1,2})(?:st|nd|rd|th)?\b/gi)) {
+    const grade = (value: string) => value.toLowerCase() === 'k' ? 0 : Number(value);
+    ageCandidates.push({ min: grade(match[1]) + 5, max: grade(match[2]) + 6, label: `Grades ${match[1].toUpperCase()}–${match[2].toUpperCase()}` });
+  }
+  if (ageCandidates.length) {
+    const matching = ageCandidates.filter((candidate) => candidate.min <= 16 && candidate.max >= 7);
+    const selected = matching.find((candidate) => candidate.min < 13) ?? matching[0];
+    if (!selected) return { include: false, ages: '', teenOnly: false, family: false };
+    const includesNine = matching.some((candidate) => candidate.min <= 9 && candidate.max >= 9);
+    return { include: true, ages: selected.label, teenOnly: matching.every((candidate) => candidate.min >= 13) || (!includesNine && namedTeen), family };
+  }
+  if (/\badults? only\b|\b18\s*\+|\bseniors?\b|\btoddlers?\b|\bpreschool/.test(lower)) return { include: false, ages: '', teenOnly: false, family: false };
+  if (/\bteens?|tweens?|middle school|high school/.test(lower)) return { include: true, ages: labels.find((label) => /teen|tween/i.test(label)) ?? 'Teens / tweens', teenOnly: namedTeen || (!family && !/\bchildren|kids?|elementary|school[- ]age\b/.test(lower) && /\bteens?|high school\b/.test(lower)), family };
+  if (family) return { include: true, ages: 'Family / all ages', teenOnly: false, family: true };
+  if (/\bchildren|child(?:ren)?|kids?|youth|school[- ]age/.test(lower)) return { include: true, ages: labels.find((label) => /child|kid|youth/i.test(label)) ?? 'Kids / youth', teenOnly: false, family };
   const publicActivity = /\b(concert|festival|fair|market|hike|walk|nature|birds?|skate|arts?|craft|story|show|movie|dance|celebration|workshop)\b/.test(lower);
-  return { include: sourceKind !== 'Library' && publicActivity, ages: 'Family / age not specified', family: true };
+  return { include: sourceKind !== 'Library' && publicActivity, ages: 'Family / age not specified', teenOnly: false, family: true };
 }
 
 function categoryFor(text: string) {
@@ -123,6 +140,7 @@ function normalize(record: UnknownRecord, feed: BrowserFeed, start: string, end:
     address,
     distance: feed.distance,
     ages: matchedAudience.ages,
+    teenOnly: matchedAudience.teenOnly,
     family: matchedAudience.family,
     ...categoryFor(`${title} ${fullDescription} ${labels.join(' ')}`),
     description,
