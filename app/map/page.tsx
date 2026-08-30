@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages -- hard navigations are intentional for the current Sites runtime */
 const closestLibraries = [
   { name: 'Green Hills Public Library District', distance: 1.40, town: 'Palos Hills' },
   { name: 'Bridgeview Public Library', distance: 1.81, town: 'Bridgeview' },

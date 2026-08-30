@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages -- hard navigations are intentional for the current Sites runtime */
 'use client';
 
 import { useMemo, useState } from 'react';

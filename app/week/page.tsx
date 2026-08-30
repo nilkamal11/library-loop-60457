@@ -1,33 +1,56 @@
-const weekDays = [
-  {
-    day: 'Saturday', date: 'Aug 29', events: [
-      { time: '10:00 AM', title: 'Family Maker Lab', library: 'Green Hills Public Library District', ages: 'All ages', distance: '1.4 mi', tone: 'coral' },
-      { time: '1:30 PM', title: 'Tween LEGO Challenge', library: 'Oak Lawn Public Library', ages: 'Ages 8–12', distance: '4.0 mi', tone: 'blue' },
-      { time: '3:00 PM', title: 'Teen Dungeons & Dragons', library: 'Chicago Public Library · Clearing', ages: 'Ages 13–17', distance: '4.4 mi', tone: 'plum' },
-    ],
-  },
-  {
-    day: 'Sunday', date: 'Aug 30', events: [
-      { time: '9:00 AM', title: 'Happy Hummingbirds', library: 'Forest Preserves · Sagawau', ages: 'Family', distance: '5.6 mi', tone: 'blue' },
-      { time: '11:00 AM', title: 'Sunday Family Stories', library: 'Palos Heights Public Library', ages: 'Family', distance: '4.5 mi', tone: 'gold' },
-      { time: '2:00 PM', title: 'Young Artists Studio', library: 'Bridgeview Public Library', ages: 'Ages 7–12', distance: '1.8 mi', tone: 'coral' },
-      { time: '6:00 PM', title: 'Summer Concert on the Green', library: 'Oak Lawn Park District', ages: 'Family', distance: '4.0 mi', tone: 'gold' },
-    ],
-  },
-  { day: 'Monday', date: 'Aug 31', events: [{ time: '4:00 PM', title: 'After-School Chess Club', library: 'Worth Public Library District', ages: 'Grades 3–8', distance: '3.0 mi', tone: 'blue' }] },
-  { day: 'Tuesday', date: 'Sep 1', events: [{ time: '6:00 PM', title: 'Family Science Night', library: 'Prairie Trails Public Library District', ages: 'Family', distance: '3.1 mi', tone: 'gold' }] },
-  {
-    day: 'Wednesday', date: 'Sep 2', events: [
-      { time: '4:30 PM', title: 'Graphic Novel Book Club', library: 'Justice Public Library District', ages: 'Ages 10–14', distance: '2.0 mi', tone: 'plum' },
-      { time: '6:30 PM', title: 'Family Bingo', library: 'Evergreen Park Public Library', ages: 'All ages', distance: '6.7 mi', tone: 'coral' },
-    ],
-  },
-  { day: 'Thursday', date: 'Sep 3', events: [{ time: '5:00 PM', title: 'Teen Open Studio', library: 'La Grange Public Library', ages: 'Grades 7–12', distance: '6.5 mi', tone: 'coral' }] },
-  { day: 'Friday', date: 'Sep 4', events: [{ time: '3:30 PM', title: 'Coding for Curious Kids', library: 'Indian Prairie Public Library District', ages: 'Ages 9–13', distance: '6.9 mi', tone: 'blue' }] },
-];
+/* eslint-disable @next/next/no-html-link-for-pages -- hard navigations are intentional for the current Sites runtime */
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import {
+  addDays,
+  chicagoTodayKey,
+  formatEventTime,
+  makeDateStrip,
+  type EventsResponse,
+} from '@/lib/live-event';
 
 export default function WeekPage() {
-  const eventCount = weekDays.reduce((total, day) => total + day.events.length, 0);
+  const [weekStart, setWeekStart] = useState(chicagoTodayKey);
+  const [data, setData] = useState<EventsResponse | null>(null);
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const dates = useMemo(() => makeDateStrip(weekStart), [weekStart]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/events?start=${weekStart}&days=7`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error('Event refresh failed');
+        return response.json() as Promise<EventsResponse>;
+      })
+      .then((nextData) => {
+        setData(nextData);
+        setLoadState('ready');
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setLoadState('error');
+      });
+    return () => controller.abort();
+  }, [weekStart]);
+
+  const eventsByDate = useMemo(() => {
+    const grouped = new Map<string, NonNullable<EventsResponse['events']>>();
+    for (const event of data?.events ?? []) {
+      const list = grouped.get(event.dateKey) ?? [];
+      list.push(event);
+      grouped.set(event.dateKey, list);
+    }
+    return grouped;
+  }, [data]);
+  const eventCount = data?.events.length ?? 0;
+  const sourceStatus = data?.sourceStatus;
+
+  const changeWeek = (amount: number) => {
+    setLoadState('loading');
+    setData(null);
+    setWeekStart((current) => addDays(current, amount * 7));
+  };
 
   return (
     <main className="app-shell">
@@ -40,41 +63,61 @@ export default function WeekPage() {
           <a className="nav-link" href="/sources"><span aria-hidden="true">↻</span> Calendar sources</a>
         </nav>
         <div className="sidebar-spacer" />
-        <section className="coverage-card" aria-label="Week coverage">
-          <p className="eyebrow">This example week</p><strong>{eventCount} events</strong>
-          <p>Across 13 nearby organizations<br />for ages 7–16 + family</p>
-          <div className="coverage-meter connected"><span /></div><small>Within the 15 mile search</small>
+        <section className="coverage-card" aria-label="Live week coverage">
+          <p className="eyebrow">This live week</p><strong>{loadState === 'loading' ? 'Checking…' : `${eventCount} events`}</strong>
+          <p>{sourceStatus ? `${sourceStatus.connected} structured calendars responded` : 'Official calendars are loading'}<br />for ages 7–16 + family</p>
+          <div className={`coverage-meter ${loadState === 'ready' ? 'connected' : ''}`}><span /></div><small>Within the 15 mile search</small>
         </section>
       </aside>
 
       <section className="workspace week-workspace">
         <header className="topbar">
-          <div><p className="eyebrow">August 29–September 4</p><h1>Week at a glance.</h1><p className="lede">A seven-day view of nearby library, park, and nature events for kids ages 7–16.</p></div>
-          <div className="location-button" aria-label="Search location"><span className="location-dot" aria-hidden="true" /> 60457</div>
+          <div><p className="eyebrow">{dates[0].shortLabel}–{dates[6].shortLabel}</p><h1>Week at a glance.</h1><p className="lede">Live nearby library, park, recreation, and nature events with official detail and signup links.</p></div>
+          <div className="week-controls" aria-label="Change week">
+            <button onClick={() => changeWeek(-1)} type="button" aria-label="Previous week">‹</button>
+            <span><i className="location-dot" aria-hidden="true" /> 60457</span>
+            <button onClick={() => changeWeek(1)} type="button" aria-label="Next week">›</button>
+          </div>
         </header>
 
-        <div className="preview-note" role="note"><span>Design preview</span>Example event details are shown until live library calendars are connected.</div>
+        <div className={`preview-note live-feed-note ${loadState}`} role="status">
+          <span>{loadState === 'ready' ? 'Live feeds' : loadState === 'error' ? 'Refresh issue' : 'Connecting'}</span>
+          {loadState === 'loading' && 'Checking official calendars and signup links…'}
+          {loadState === 'error' && 'The live refresh did not finish. Try again shortly.'}
+          {loadState === 'ready' && `${sourceStatus?.connected ?? 0} of ${sourceStatus?.attempted ?? 0} structured calendars responded. Select any event to open its official listing.`}
+        </div>
 
-        <section className="week-board" aria-label="Example events for the week">
-          {weekDays.map((day, index) => (
-            <article className={`week-day-card ${index === 0 ? 'today' : ''}`} key={day.day}>
-              <header><div><p>{day.day}</p><strong>{day.date}</strong></div><span>{day.events.length}</span></header>
-              <div className="week-events">
-                {day.events.map((event) => (
-                  <div className="week-event" key={event.title}>
-                    <i className={event.tone} aria-hidden="true" />
-                    <time>{event.time}</time>
-                    <h2>{event.title}</h2>
-                    <p>{event.library}</p>
-                    <footer><span>{event.ages}</span><span>⌖ {event.distance}</span></footer>
+        {loadState === 'loading' ? (
+          <div className="empty-state week-loading"><span aria-hidden="true">↻</span><h2>Building the live week</h2><p>Dates, locations, and registration information are loading now.</p></div>
+        ) : (
+          <section className="week-board" aria-label="Live events for the week">
+            {dates.map((day) => {
+              const events = eventsByDate.get(day.key) ?? [];
+              return (
+                <article className={`week-day-card ${day.key === chicagoTodayKey() ? 'today' : ''}`} key={day.key}>
+                  <header><div><p>{day.day}</p><strong>{day.shortLabel}</strong></div><span>{events.length}</span></header>
+                  <div className="week-events">
+                    {events.map((event) => {
+                      const displayTime = formatEventTime(event);
+                      return (
+                        <a className="week-event week-event-link" href={event.registrationUrl} target="_blank" rel="noreferrer" key={event.id} aria-label={`Open official details for ${event.title}`}>
+                          <i className={event.tone} aria-hidden="true" />
+                          <time dateTime={event.startLocal}>{displayTime.time} {displayTime.period}</time>
+                          <h2>{event.title}</h2>
+                          <p>{event.source}</p>
+                          <footer><span>{event.ages}</span><span>⌖ {event.distance.toFixed(1)} mi ↗</span></footer>
+                        </a>
+                      );
+                    })}
+                    {!events.length && <div className="week-day-empty">No matching live events</div>}
                   </div>
-                ))}
-              </div>
-            </article>
-          ))}
-        </section>
+                </article>
+              );
+            })}
+          </section>
+        )}
 
-        <aside className="week-note"><strong>Prefer one day at a time?</strong><span>Use the Day planner to filter by age, family events, distance, and activity type.</span><a href="/">Open Day planner →</a></aside>
+        <aside className="week-note"><strong>Need filters and full details?</strong><span>The Day planner includes distance, activity type, family-event filters, registration status, and descriptions.</span><a href="/">Open Day planner →</a></aside>
       </section>
     </main>
   );

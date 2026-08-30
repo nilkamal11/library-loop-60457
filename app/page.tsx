@@ -1,60 +1,101 @@
+/* eslint-disable @next/next/no-html-link-for-pages -- hard navigations are intentional for the current Sites runtime */
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  addDays,
+  chicagoTodayKey,
+  formatDuration,
+  formatEventDateTime,
+  formatEventTime,
+  makeDateStrip,
+  type EventsResponse,
+  type LiveEvent,
+} from '@/lib/live-event';
 
-type EventItem = {
-  time: string; period: string; duration: string; title: string; library: string;
-  distance: number; ages: string; tone: string; mark: string; category: string;
-  family: boolean; address: string;
-};
+const categoryCycle = ['All types', 'Make', 'Build', 'Play', 'Read', 'Create', 'Outdoor', 'Music', 'Explore'];
 
-const dates = [
-  { day: 'Sat', date: '29', label: 'Saturday, August 29' },
-  { day: 'Sun', date: '30', label: 'Sunday, August 30' },
-  { day: 'Mon', date: '31', label: 'Monday, August 31' },
-  { day: 'Tue', date: '01', label: 'Tuesday, September 1' },
-  { day: 'Wed', date: '02', label: 'Wednesday, September 2' },
-  { day: 'Thu', date: '03', label: 'Thursday, September 3' },
-  { day: 'Fri', date: '04', label: 'Friday, September 4' },
-];
+function updatedLabel(value?: string) {
+  if (!value) return '';
+  return new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'America/Chicago',
+  }).format(new Date(value));
+}
 
-const eventSets: EventItem[][] = [
-  [
-    { time:'10:00',period:'AM',duration:'60 min',title:'Family Maker Lab',library:'Green Hills Public Library District',distance:1.4,ages:'All ages',tone:'coral',mark:'MAKE',category:'Make',family:true,address:'8611 W 103rd St, Palos Hills' },
-    { time:'1:30',period:'PM',duration:'90 min',title:'Tween LEGO Challenge',library:'Oak Lawn Public Library',distance:4.0,ages:'Ages 8–12',tone:'blue',mark:'BUILD',category:'Build',family:false,address:'9427 S Raymond Ave, Oak Lawn' },
-    { time:'3:00',period:'PM',duration:'2 hrs',title:'Teen Dungeons & Dragons',library:'Chicago Public Library · Clearing',distance:4.4,ages:'Ages 13–17',tone:'plum',mark:'PLAY',category:'Play',family:false,address:'6423 W 63rd Pl, Chicago' },
-  ],
-  [
-    { time:'9:00',period:'AM',duration:'Drop in',title:'Happy Hummingbirds',library:'Forest Preserves of Cook County · Sagawau',distance:5.6,ages:'Family',tone:'blue',mark:'EXPLORE',category:'Outdoor',family:true,address:'12545 W 111th St, Lemont' },
-    { time:'11:00',period:'AM',duration:'45 min',title:'Sunday Family Stories',library:'Palos Heights Public Library',distance:4.5,ages:'Family',tone:'gold',mark:'READ',category:'Read',family:true,address:'12501 S 71st Ave, Palos Heights' },
-    { time:'2:00',period:'PM',duration:'60 min',title:'Young Artists Studio',library:'Bridgeview Public Library',distance:1.8,ages:'Ages 7–12',tone:'coral',mark:'CREATE',category:'Create',family:false,address:'7840 W 79th St, Bridgeview' },
-    { time:'6:00',period:'PM',duration:'2 hrs',title:'Summer Concert on the Green',library:'Oak Lawn Park District · Village Green',distance:4.0,ages:'Family',tone:'gold',mark:'LISTEN',category:'Music',family:true,address:'9446 S Raymond Ave, Oak Lawn' },
-  ],
-  [{ time:'4:00',period:'PM',duration:'60 min',title:'After-School Chess Club',library:'Worth Public Library District',distance:3.0,ages:'Grades 3–8',tone:'blue',mark:'PLAY',category:'Play',family:false,address:'6917 W 111th St, Worth' }],
-  [{ time:'6:00',period:'PM',duration:'75 min',title:'Family Science Night',library:'Prairie Trails Public Library District',distance:3.1,ages:'Family',tone:'gold',mark:'DISCOVER',category:'Make',family:true,address:'8449 S Moody Ave, Burbank' }],
-  [
-    { time:'4:30',period:'PM',duration:'60 min',title:'Graphic Novel Book Club',library:'Justice Public Library District',distance:2.0,ages:'Ages 10–14',tone:'plum',mark:'READ',category:'Read',family:false,address:'7641 S 78th Ave, Justice' },
-    { time:'6:30',period:'PM',duration:'60 min',title:'Family Bingo',library:'Evergreen Park Public Library',distance:6.7,ages:'All ages',tone:'coral',mark:'PLAY',category:'Play',family:true,address:'9400 S Troy Ave, Evergreen Park' },
-  ],
-  [{ time:'5:00',period:'PM',duration:'90 min',title:'Teen Open Studio',library:'La Grange Public Library',distance:6.5,ages:'Grades 7–12',tone:'coral',mark:'CREATE',category:'Create',family:false,address:'10 W Cossitt Ave, La Grange' }],
-  [{ time:'3:30',period:'PM',duration:'60 min',title:'Coding for Curious Kids',library:'Indian Prairie Public Library District',distance:6.9,ages:'Ages 9–13',tone:'blue',mark:'BUILD',category:'Build',family:false,address:'401 Plainfield Rd, Darien' }],
-];
-
-const categoryCycle = ['All types', 'Make', 'Build', 'Play', 'Read', 'Create', 'Outdoor', 'Music'];
+function registrationCta(event: LiveEvent) {
+  const status = event.registrationStatus.toLowerCase();
+  if ((status.includes('required') || status.includes('available') || status.includes('window open')) && !status.includes('closed')) return 'Open signup / event details';
+  return 'View official event';
+}
 
 export default function Home() {
+  const [weekStart, setWeekStart] = useState(chicagoTodayKey);
   const [selectedDate, setSelectedDate] = useState(0);
   const [includeFamily, setIncludeFamily] = useState(true);
   const [radius, setRadius] = useState(15);
   const [category, setCategory] = useState('All types');
-  const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<LiveEvent | null>(null);
+  const [data, setData] = useState<EventsResponse | null>(null);
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
 
-  const visibleEvents = useMemo(() => eventSets[selectedDate].filter((event) =>
-    event.distance <= radius && (includeFamily || !event.family) && (category === 'All types' || event.category === category)
-  ), [selectedDate, includeFamily, radius, category]);
+  const dates = useMemo(() => makeDateStrip(weekStart), [weekStart]);
+  const selectedKey = dates[selectedDate]?.key ?? weekStart;
+  const todayKey = chicagoTodayKey();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/events?start=${weekStart}&days=7`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error('Event refresh failed');
+        return response.json() as Promise<EventsResponse>;
+      })
+      .then((nextData) => {
+        setData(nextData);
+        setLoadState('ready');
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setLoadState('error');
+      });
+    return () => controller.abort();
+  }, [weekStart]);
+
+  const eventCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const event of data?.events ?? []) counts.set(event.dateKey, (counts.get(event.dateKey) ?? 0) + 1);
+    return counts;
+  }, [data]);
+
+  const visibleEvents = useMemo(() => (data?.events ?? []).filter((event) =>
+    event.dateKey === selectedKey
+    && event.distance <= radius
+    && (includeFamily || !event.family)
+    && (category === 'All types' || event.category === category)
+  ), [data, selectedKey, includeFamily, radius, category]);
 
   const cycleRadius = () => setRadius((current) => current === 15 ? 5 : current === 5 ? 10 : 15);
   const cycleCategory = () => setCategory((current) => categoryCycle[(categoryCycle.indexOf(current) + 1) % categoryCycle.length]);
+  const changeWeek = (amount: number) => {
+    setLoadState('loading');
+    setData(null);
+    setWeekStart((current) => addDays(current, amount * 7));
+    setSelectedDate(0);
+    setSelectedEvent(null);
+  };
+  const chooseDate = (index: number) => {
+    setSelectedDate(index);
+    setSelectedEvent(null);
+  };
+
+  const sourceStatus = data?.sourceStatus;
+  const liveNote = loadState === 'loading'
+    ? 'Checking official calendars and registration links…'
+    : loadState === 'error'
+      ? 'The live refresh did not finish. Try again shortly or open Calendar sources for the official pages.'
+      : `${sourceStatus?.connected ?? 0} of ${sourceStatus?.attempted ?? 0} structured calendars responded · refreshed ${updatedLabel(data?.updatedAt)} CT`;
 
   return (
     <main className="app-shell">
@@ -67,29 +108,31 @@ export default function Home() {
           <a className="nav-link" href="/sources"><span aria-hidden="true">↻</span> Calendar sources</a>
         </nav>
         <div className="sidebar-spacer" />
-        <section className="coverage-card" id="sources" aria-label="Search coverage">
-          <p className="eyebrow">Search coverage</p><strong>15 mile radius</strong>
-          <p>75 library systems<br />61 park & nature calendars</p>
-          <div className="coverage-meter expanded"><span /></div><small>120 calendars ready to automate</small>
+        <section className="coverage-card" aria-label="Live feed coverage">
+          <p className="eyebrow">Live feed check</p>
+          <strong>{sourceStatus ? `${sourceStatus.connected} of ${sourceStatus.attempted}` : 'Connecting…'}</strong>
+          <p>Structured library, park, recreation, and nature calendars</p>
+          <div className={`coverage-meter ${loadState === 'ready' ? 'connected' : ''}`}><span /></div>
+          <small>{sourceStatus ? `${sourceStatus.empty} connected calendars have no matching events this week` : 'Official listings are being checked'}</small>
         </section>
       </aside>
 
       <section className="workspace">
         <header className="topbar">
-          <div><p className="eyebrow">{dates[selectedDate].label}</p><h1>{dates[selectedDate].day} events nearby.</h1><p className="lede">Library, park district, and forest preserve events for kids ages 7–16.</p></div>
-          <button className="location-button" type="button" title="The starting ZIP for this dashboard"><span className="location-dot" aria-hidden="true" /> 60457 <span aria-hidden="true">⌄</span></button>
+          <div><p className="eyebrow">{dates[selectedDate].label}</p><h1>{dates[selectedDate].day} events nearby.</h1><p className="lede">Live library, park district, recreation, and forest preserve events for kids ages 7–16.</p></div>
+          <button className="location-button" type="button" title="The starting ZIP for this calendar"><span className="location-dot" aria-hidden="true" /> 60457 <span aria-hidden="true">15 mi</span></button>
         </header>
 
-        <div className="preview-note" role="note"><span>Design preview</span>Example event details are shown until live library calendars are connected.</div>
+        <div className={`preview-note live-feed-note ${loadState}`} role="status"><span>{loadState === 'ready' ? 'Live feeds' : loadState === 'error' ? 'Refresh issue' : 'Connecting'}</span>{liveNote}</div>
 
-        <section className="date-strip" id="week" aria-label="Choose a date">
-          <button className="month-button" type="button" aria-label="Previous week">‹</button>
+        <section className="date-strip" aria-label="Choose a date">
+          <button className="month-button" onClick={() => changeWeek(-1)} type="button" aria-label="Previous week">‹</button>
           {dates.map((item, index) => (
-            <button className={`date-button ${selectedDate === index ? 'active' : ''}`} aria-pressed={selectedDate === index} key={`${item.day}-${item.date}`} onClick={() => { setSelectedDate(index); setSelectedEvent(null); }} type="button">
-              <span>{item.day}</span><strong>{item.date}</strong>{eventSets[index].length > 0 && <i aria-hidden="true" />}
+            <button className={`date-button ${selectedDate === index ? 'active' : ''}`} aria-pressed={selectedDate === index} key={item.key} onClick={() => chooseDate(index)} type="button">
+              <span>{item.day}</span><strong>{item.date}</strong>{(eventCounts.get(item.key) ?? 0) > 0 && <i aria-hidden="true" />}
             </button>
           ))}
-          <button className="month-button" type="button" aria-label="Next week">›</button>
+          <button className="month-button" onClick={() => changeWeek(1)} type="button" aria-label="Next week">›</button>
         </section>
 
         <div className="filters" aria-label="Event filters">
@@ -100,45 +143,58 @@ export default function Home() {
         </div>
 
         <div className="content-grid">
-          <section className="agenda" id="day">
-            <div className="section-heading"><div><span className="today-dot" /> {selectedDate === 0 ? 'Today’s agenda' : dates[selectedDate].label}</div><span>{visibleEvents.length} example {visibleEvents.length === 1 ? 'event' : 'events'}</span></div>
-            {visibleEvents.length ? (
+          <section className="agenda">
+            <div className="section-heading"><div><span className="today-dot" /> {selectedKey === todayKey ? 'Today’s agenda' : dates[selectedDate].label}</div><span>{visibleEvents.length} live {visibleEvents.length === 1 ? 'event' : 'events'}</span></div>
+            {loadState === 'loading' ? (
+              <div className="empty-state loading-state"><span aria-hidden="true">↻</span><h2>Checking nearby calendars</h2><p>Dates, signup status, and official links are loading now.</p></div>
+            ) : visibleEvents.length ? (
               <div className="timeline">
-                {visibleEvents.map((event) => (
-                  <article className="event-row" key={event.title}>
-                    <time><strong>{event.time}</strong><span>{event.period}</span></time>
-                    <div className="timeline-node" aria-hidden="true"><span /></div>
-                    <div className="event-card">
-                      <div className={`event-mark ${event.tone}`}><span>{event.mark}</span></div>
-                      <div className="event-copy">
-                        <div className="event-meta"><span>{event.ages}</span><span>{event.duration}</span></div>
-                        <h2>{event.title}</h2><p>{event.library}</p>
-                        <div className="event-footer"><span>⌖ {event.distance.toFixed(1)} mi</span><button onClick={() => setSelectedEvent(event)} type="button">View details <span>↗</span></button></div>
+                {visibleEvents.map((event) => {
+                  const displayTime = formatEventTime(event);
+                  return (
+                    <article className="event-row" key={event.id}>
+                      <time dateTime={event.startLocal}><strong>{displayTime.time}</strong><span>{displayTime.period}</span></time>
+                      <div className="timeline-node" aria-hidden="true"><span /></div>
+                      <div className="event-card">
+                        <div className={`event-mark ${event.tone}`}><span>{event.mark}</span></div>
+                        <div className="event-copy">
+                          <div className="event-meta"><span>{event.ages}</span><span>{formatDuration(event)}</span>{event.scheduleNotice && <span className="event-alert">Schedule update</span>}</div>
+                          <h2>{event.title}</h2><p>{event.source}{event.venue !== event.source ? ` · ${event.venue}` : ''}</p>
+                          <div className="event-footer"><span>⌖ {event.distance.toFixed(1)} mi · {event.registrationStatus}</span><button onClick={() => setSelectedEvent(event)} type="button">Details & signup <span>↗</span></button></div>
+                        </div>
                       </div>
-                    </div>
-                  </article>
-                ))}
+                    </article>
+                  );
+                })}
               </div>
             ) : (
-              <div className="empty-state"><span aria-hidden="true">○</span><h2>No examples match these filters</h2><p>Try widening the distance or including family events.</p></div>
+              <div className="empty-state"><span aria-hidden="true">○</span><h2>No live matches for this day</h2><p>{loadState === 'error' ? 'The feed refresh had a problem. Please try again shortly.' : 'Try another date, widen the distance, or include family events.'}</p></div>
             )}
           </section>
 
           {selectedEvent ? (
             <aside className="detail-panel" aria-live="polite">
               <button className="close-button" onClick={() => setSelectedEvent(null)} type="button" aria-label="Close event details">×</button>
-              <p className="eyebrow">Example event</p><h2>{selectedEvent.title}</h2>
-              <div className="detail-tags"><span>{selectedEvent.ages}</span><span>{selectedEvent.duration}</span></div>
-              <dl><div><dt>When</dt><dd>{dates[selectedDate].label}<br />{selectedEvent.time} {selectedEvent.period}</dd></div><div><dt>Where</dt><dd>{selectedEvent.library}<br />{selectedEvent.address}</dd></div><div><dt>Distance</dt><dd>{selectedEvent.distance.toFixed(1)} miles</dd></div></dl>
-              <p className="detail-note">The live version will show registration, availability, accessibility notes, and a verified link to the library’s original listing.</p>
-              <button className="source-button" type="button" disabled>Source link arrives with live feeds</button>
+              <p className="eyebrow">{selectedEvent.sourceKind} · official live listing</p><h2>{selectedEvent.title}</h2>
+              <div className="detail-tags"><span>{selectedEvent.ages}</span><span>{formatDuration(selectedEvent)}</span></div>
+              {selectedEvent.scheduleNotice && <div className="schedule-warning">{selectedEvent.scheduleNotice}</div>}
+              <dl>
+                <div><dt>When</dt><dd>{formatEventDateTime(selectedEvent)}</dd></div>
+                <div><dt>Where</dt><dd>{selectedEvent.venue}<br />{selectedEvent.address}</dd></div>
+                <div><dt>Distance</dt><dd>{selectedEvent.distance.toFixed(1)} miles from 60457</dd></div>
+                <div><dt>Signup status</dt><dd>{selectedEvent.registrationStatus}</dd></div>
+              </dl>
+              <p className="detail-note">{selectedEvent.description || 'This feed does not include a full description. The official event page has the latest details.'}</p>
+              <a className="source-button source-button-live" href={selectedEvent.registrationUrl} target="_blank" rel="noreferrer">{registrationCta(selectedEvent)} <span aria-hidden="true">↗</span></a>
+              {selectedEvent.registrationUrl !== selectedEvent.url && <a className="secondary-source-link" href={selectedEvent.url} target="_blank" rel="noreferrer">Open original event listing ↗</a>}
+              <small className="source-disclaimer">The official organizer controls availability and last-minute changes.</small>
             </aside>
           ) : (
-            <aside className="day-summary" id="map">
+            <aside className="day-summary">
               <div className="summary-art" aria-hidden="true"><span>15</span><small>MILES</small></div>
-              <p className="eyebrow">Your search</p><h2>One useful calendar,<br />not 75 browser tabs.</h2>
-              <p>We’ll combine nearby library, park district, and forest preserve calendars, keep events that welcome ages 7–16, and link every listing back to its source.</p>
-              <dl><div><dt>Area</dt><dd>60457 + 15 mi</dd></div><div><dt>Ages</dt><dd>7–16 + family</dd></div><div><dt>Sources</dt><dd>136 calendars</dd></div></dl>
+              <p className="eyebrow">Live calendar area</p><h2>Nearby events from official sources.</h2>
+              <p>Events are pulled from public calendars, matched to ages 7–16 and family audiences, and linked back to the organizer for signup and current availability.</p>
+              <dl><div><dt>Area</dt><dd>60457 + 15 mi</dd></div><div><dt>Ages</dt><dd>7–16 + family</dd></div><div><dt>Feeds responding</dt><dd>{sourceStatus ? `${sourceStatus.connected}/${sourceStatus.attempted}` : 'Checking'}</dd></div></dl>
             </aside>
           )}
         </div>
