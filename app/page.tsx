@@ -105,6 +105,7 @@ export default function Home() {
   };
 
   const sourceStatus = data?.sourceStatus;
+  const totalSources = Math.max(sourceStatus?.attempted ?? 0, 97);
   const sourceIssueNote = sourceStatus?.failed
     ? ` · ${sourceStatus.failed} ${sourceStatus.failed === 1 ? 'source is' : 'sources are'} temporarily unavailable`
     : sourceStatus?.retained
@@ -114,7 +115,7 @@ export default function Home() {
     ? 'Loading today’s saved calendar snapshot…'
     : loadState === 'error'
       ? 'The live refresh did not finish. Try again shortly or open Calendar sources for the official pages.'
-      : `${sourceStatus?.connected ?? 0} of ${sourceStatus?.attempted ?? 0} daily sources available${sourceIssueNote} · updated ${updatedLabel(data?.updatedAt)} CT`;
+      : `${sourceStatus?.connected ?? 0} of ${totalSources} calendar sources available${sourceIssueNote} · updated ${updatedLabel(data?.updatedAt)} CT`;
 
   return (
     <main className="app-shell">
@@ -129,7 +130,7 @@ export default function Home() {
         <div className="sidebar-spacer" />
         <section className="coverage-card" aria-label="Live feed coverage">
           <p className="eyebrow">Daily calendar snapshot</p>
-          <strong>{sourceStatus ? `${sourceStatus.connected} of ${sourceStatus.attempted}` : 'Connecting…'}</strong>
+          <strong>{sourceStatus ? `${sourceStatus.connected} of ${totalSources}` : 'Connecting…'}</strong>
           <p>Official events refreshed once each day</p>
           <div className={`coverage-meter ${loadState === 'ready' ? 'connected' : ''}`}><span /></div>
           <small>{sourceStatus

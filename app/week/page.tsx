@@ -54,6 +54,7 @@ export default function WeekPage() {
   }, [visibleEvents]);
   const eventCount = visibleEvents.length;
   const sourceStatus = data?.sourceStatus;
+  const totalSources = Math.max(sourceStatus?.attempted ?? 0, 97);
 
   const changeWeek = (amount: number) => {
     setLoadState('loading');
@@ -74,7 +75,7 @@ export default function WeekPage() {
         <div className="sidebar-spacer" />
         <section className="coverage-card" aria-label="Daily week coverage">
           <p className="eyebrow">This daily week</p><strong>{loadState === 'loading' ? 'Loading…' : `${eventCount} events`}</strong>
-          <p>{sourceStatus ? `${sourceStatus.connected} daily sources available` : 'Today’s saved events are loading'}<br />for kids + family{showTeenEvents ? ' + teens' : ''}</p>
+          <p>{sourceStatus ? `${sourceStatus.connected} of ${totalSources} calendar sources available` : 'Today’s saved events are loading'}<br />for kids + family{showTeenEvents ? ' + teens' : ''}</p>
           <div className={`coverage-meter ${loadState === 'ready' ? 'connected' : ''}`}><span /></div><small>Within the 15 mile search</small>
         </section>
       </aside>
@@ -93,7 +94,7 @@ export default function WeekPage() {
           <span>{loadState === 'ready' ? 'Daily snapshot' : loadState === 'error' ? 'Refresh issue' : 'Loading'}</span>
           {loadState === 'loading' && 'Loading today’s saved calendar snapshot…'}
           {loadState === 'error' && 'The live refresh did not finish. Try again shortly.'}
-          {loadState === 'ready' && `${sourceStatus?.connected ?? 0} of ${sourceStatus?.attempted ?? 0} daily sources available${sourceStatus?.failed ? `; ${sourceStatus.failed} ${sourceStatus.failed === 1 ? 'source is' : 'sources are'} temporarily unavailable` : sourceStatus?.retained ? `; ${sourceStatus.retained} ${sourceStatus.retained === 1 ? 'source is' : 'sources are'} using last-known-good events` : ''}. Select any event to open its official listing.`}
+          {loadState === 'ready' && `${sourceStatus?.connected ?? 0} of ${totalSources} calendar sources available${sourceStatus?.failed ? `; ${sourceStatus.failed} ${sourceStatus.failed === 1 ? 'source is' : 'sources are'} temporarily unavailable` : sourceStatus?.retained ? `; ${sourceStatus.retained} ${sourceStatus.retained === 1 ? 'source is' : 'sources are'} using last-known-good events` : ''}. Select any event to open its official listing.`}
         </div>
 
         <div className="filters" aria-label="Week filters">
