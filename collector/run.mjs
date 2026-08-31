@@ -167,8 +167,15 @@ async function collectOne(session, source, window, options) {
     const candidates = [...jsonLdCandidates, ...pageResult.domCandidates];
     const normalized = normalizeCandidates(candidates, source, window);
     const status = normalized.events.length ? 'success' : 'empty';
+    const emptyReason = 'No confidently publishable events were found; retain the last-known-good snapshot.';
     return {
-      sourceResult: { sourceId: source.id, sourceName: source.name, status, events: normalized.events },
+      sourceResult: {
+        sourceId: source.id,
+        sourceName: source.name,
+        status,
+        ...(status === 'empty' ? { error: emptyReason } : {}),
+        events: normalized.events,
+      },
       audit: {
         ...pageResult.audit,
         sourceName: source.name,
@@ -262,7 +269,20 @@ async function main() {
   if (options.mode === 'upload') {
     const upload = await uploadPayload(payload, { ...(options.endpoint ? { endpoint: options.endpoint } : {}) });
     const requestNote = upload.requestId ? ` Request ${upload.requestId}.` : '';
-    console.log(`Upload accepted (HTTP ${upload.status}).${requestNote}`);
+    const appliedNote = Number.isInteger(upload.appliedSourceCount) ? ` Applied ${upload.appliedSourceCount} sources.` : '';
+    const staleNote = upload.staleSourceIds?.length ? ` Ignored ${upload.staleSourceIds.length} stale source writes.` : '';
+    audit.upload = {
+      accepted: true,
+      acceptedAt: new Date().toISOString(),
+      status: upload.status,
+      requestId: upload.requestId,
+      eventCount: upload.eventCount,
+      sourceCount: upload.sourceCount,
+      appliedSourceCount: upload.appliedSourceCount,
+      staleSourceIds: upload.staleSourceIds ?? [],
+    };
+    await writeFile(artifacts.auditPath, `${JSON.stringify(audit, null, 2)}\n`, 'utf8');
+    console.log(`Upload accepted (HTTP ${upload.status}).${requestNote}${appliedNote}${staleNote}`);
   } else {
     console.log('Dry run complete; upload was not attempted.');
   }

@@ -28,6 +28,12 @@ yarn-error.log*
 
 # local environment
 .env*
+.dev.vars*
+*.key
+*.p12
+*.pfx
+*.sqlite*
+*.db-journal
 
 # deployment and generated files
 .vercel

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import {
   CHICAGO_TIME_ZONE,
   MAX_DESCRIPTION_LENGTH,
+  MAX_EVENTS_PER_BATCH,
   MAX_EVENTS_PER_SOURCE,
 } from './constants.mjs';
 import { librarySources } from './sources.mjs';
@@ -371,7 +372,7 @@ export function validateLiveEvent(event) {
   if (event.sourceKind !== 'Library') throw new TypeError('Collector LiveEvent.sourceKind must be Library');
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(event.startLocal)) throw new TypeError('LiveEvent.startLocal must be a local ISO timestamp');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(event.dateKey) || event.dateKey !== event.startLocal.slice(0, 10)) throw new TypeError('LiveEvent.dateKey must match startLocal');
-  if (!safeUrl(event.url) || !safeUrl(event.registrationUrl)) throw new TypeError('LiveEvent URLs must use HTTP or HTTPS');
+  if (!safeUrl(event.url) || !safeUrl(event.registrationUrl)) throw new TypeError('LiveEvent URLs must use HTTPS');
   return true;
 }
 
@@ -383,8 +384,11 @@ export function validateIngestPayload(payload) {
   if (typeof payload.runId !== 'string' || !/^[a-zA-Z0-9._:-]{8,100}$/.test(payload.runId)) throw new TypeError('Invalid runId');
   if (typeof payload.collectedAt !== 'string' || Number.isNaN(Date.parse(payload.collectedAt))) throw new TypeError('Invalid collectedAt');
   if (typeof payload.adapterVersion !== 'string' || !payload.adapterVersion || payload.adapterVersion.length > 60) throw new TypeError('Invalid adapterVersion');
-  if (!Array.isArray(payload.sourceResults) || payload.sourceResults.length > allowedSources.size) throw new TypeError(`sourceResults must be an array of at most ${allowedSources.size} entries`);
+  if (!Array.isArray(payload.sourceResults) || payload.sourceResults.length === 0 || payload.sourceResults.length > allowedSources.size) {
+    throw new TypeError(`sourceResults must contain 1 to ${allowedSources.size} entries`);
+  }
   const seenSources = new Set();
+  let totalEvents = 0;
   for (const result of payload.sourceResults) {
     const allowedKeys = new Set(['sourceId', 'sourceName', 'status', 'error', 'events']);
     for (const key of Object.keys(result ?? {})) if (!allowedKeys.has(key)) throw new TypeError(`Source result contains unsupported field: ${key}`);
@@ -399,6 +403,8 @@ export function validateIngestPayload(payload) {
     if (result.error !== undefined && (typeof result.error !== 'string' || result.error.length > 500)) throw new TypeError('Source error must be a short string');
     if (result.status === 'success' && result.events.length === 0) throw new TypeError('A successful source must include at least one event');
     if (result.status !== 'success' && result.events.length !== 0) throw new TypeError(`${result.status} sources cannot include events`);
+    totalEvents += result.events.length;
+    if (totalEvents > MAX_EVENTS_PER_BATCH) throw new TypeError(`Collector batch cannot exceed ${MAX_EVENTS_PER_BATCH} events`);
     for (const event of result.events) {
       validateLiveEvent(event);
       if (event.source !== result.sourceName) throw new TypeError('LiveEvent source must match sourceName');

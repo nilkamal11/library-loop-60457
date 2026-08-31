@@ -23,7 +23,7 @@ const calendarSources: CalendarSource[] = [
   { name: 'Prairie Trails Public Library District', distance: 3.06, status: 'feed', method: 'LibraryCalendar', note: 'Structured event listings.', url: 'https://prairietrails.librarycalendar.com/events/list' },
   { name: 'Bedford Park Public Library District', distance: 3.45, status: 'manual', method: 'Custom dynamic calendar', note: 'Needs browser-assisted collection.', url: 'https://bedfordparklibrary.com/events-calendar' },
   { name: 'Hodgkins Public Library District', distance: 3.56, status: 'page', method: 'HTML/PDF + partial RSS', note: 'Youth program details are available on the site.', url: 'https://www.hodgkinslibrary.org/children/programs/' },
-  { name: 'Summit Public Library District', distance: 3.85, status: 'manual', method: 'Wix flyer + OCR', note: 'Events are published visually and need review.', url: 'https://www.summitlibrary.info/events' },
+  { name: 'Summit Public Library District', distance: 3.85, status: 'manual', method: 'Wix visual event page', note: 'The overnight browser reads page text and metadata; flyer-only details stay pending review.', url: 'https://www.summitlibrary.info/events' },
   { name: 'Oak Lawn Public Library', distance: 3.97, status: 'feed', method: 'LibraryCalendar', note: 'Structured upcoming-events feed.', url: 'https://oaklawnpl.librarycalendar.com/events/upcoming' },
   { name: 'Palos Park Public Library', distance: 4.06, status: 'manual', method: 'Wix embedded calendar', note: 'Needs browser-assisted collection.', url: 'https://www.palosparklibrary.org/test-calendar' },
   { name: 'Chicago Public Library', distance: 4.40, status: 'feed', method: 'BiblioCommons RSS', note: 'Official feed filtered to kids audiences and nearby branches.', url: 'https://chipublib.bibliocommons.com/v2/events?page=1' },
@@ -68,7 +68,7 @@ const calendarSources: CalendarSource[] = [
   { name: 'Woodridge Public Library', distance: 11.35, status: 'feed', method: 'LibraryCalendar', note: 'Structured upcoming-events feed.', url: 'https://www.woodridgelibrary.org/events/upcoming' },
   { name: 'River Forest Public Library', distance: 11.70, status: 'feed', method: 'LibraryCalendar', note: 'Structured upcoming-events feed.', url: 'https://www.riverforestlibrary.org/events/upcoming' },
   { name: 'Markham Public Library', distance: 11.77, status: 'manual', method: 'WhoFi embed', note: 'Needs browser-assisted collection.', url: 'https://www.markhamlibrary.org/events/' },
-  { name: 'Melrose Park Public Library', distance: 11.87, status: 'manual', method: 'Flyer/PDF review', note: 'Queued for the overnight OCR and review lane.', url: 'https://www.melrosepark.org/melrose-park-library-events/' },
+  { name: 'Melrose Park Public Library', distance: 11.87, status: 'manual', method: 'Flyer/PDF review', note: 'The overnight browser checks the page; flyer-only details are not read automatically yet.', url: 'https://www.melrosepark.org/melrose-park-library-events/' },
   { name: 'Berkeley Public Library', distance: 11.88, status: 'manual', method: 'Wix calendar', note: 'Needs browser-assisted collection.', url: 'https://www.berkeleypl.org/events-calendar' },
   { name: 'Riverdale Public Library District', distance: 12.16, status: 'feed', method: 'WordPress Events API', note: 'Structured JSON event feed.', url: 'https://rpld.org/wp-json/tribe/events/v1/events' },
   { name: 'Harvey Public Library District', distance: 12.31, status: 'page', method: 'Freshness audit', note: 'Queued for overnight current-date validation before events are published.', url: 'https://www.harveylibrary.org/' },
@@ -95,7 +95,7 @@ const calendarSources: CalendarSource[] = [
 const statusDetails: Record<SourceStatus, { label: string; short: string; description: string }> = {
   feed: { label: 'Direct live feed', short: 'Live', description: 'A structured calendar is connected directly.' },
   page: { label: 'Overnight page', short: 'Overnight', description: 'The local overnight collector handles this official page.' },
-  manual: { label: 'Overnight browser', short: 'Browser', description: 'A browser, OCR, or review step is needed overnight.' },
+  manual: { label: 'Overnight browser', short: 'Browser', description: 'A local browser checks this page; visual-only details may remain pending review.' },
   unavailable: { label: 'Blocked / empty', short: 'Blocked', description: 'No current publishable event source is available.' },
 };
 
@@ -205,8 +205,8 @@ export default function SourcesPage() {
         </section>
 
         <aside className="source-legend" aria-label="How to read the statuses">
-          <p><strong>How to read this:</strong> Direct feeds refresh from the Site. Overnight page and browser sources run locally while your computer and the ChatGPT desktop app are on. A failed overnight source keeps its last verified event snapshot instead of clearing the calendar.</p>
-          <small>Blocked or empty sources stay listed for monitoring and are never filled with guessed events.</small>
+          <p><strong>How to read this:</strong> Direct feeds refresh from the Site. The primary overnight browser run is a Windows task that can wake a sleeping computer while your Windows user is signed in; the ChatGPT app provides a later fallback. Failed or unexpectedly empty checks keep the last verified event snapshot instead of clearing the calendar.</p>
+          <small>Blocked or empty sources stay listed for monitoring, and visual-only details are never guessed.</small>
         </aside>
       </section>
     </main>

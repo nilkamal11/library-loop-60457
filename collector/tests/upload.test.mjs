@@ -1,20 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
-import { createIngestSignature, uploadPayload } from '../upload.mjs';
+import { MAX_INGEST_BODY_BYTES } from '../constants.mjs';
+import { assertIngestBodySize, createIngestSignature, uploadPayload } from '../upload.mjs';
 
-test('signature is lowercase HMAC-SHA256 of timestamp dot raw body', () => {
-  const secret = 'test-secret';
-  const timestamp = '1788120000';
-  const rawBody = '{"runId":"library-loop-test"}';
-  const expected = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');
-  const signature = createIngestSignature(secret, timestamp, rawBody);
-  assert.equal(signature, expected);
-  assert.match(signature, /^[0-9a-f]{64}$/);
-});
-
-test('uploader signs and sends the exact raw JSON contract', async () => {
-  const payload = {
+function validPayload() {
+  return {
     runId: 'library-loop-upload-test',
     collectedAt: '2026-08-30T20:00:00.000Z',
     adapterVersion: 'library-loop-browser-v1',
@@ -46,6 +37,20 @@ test('uploader signs and sends the exact raw JSON contract', async () => {
       }],
     }],
   };
+}
+
+test('signature is lowercase HMAC-SHA256 of timestamp dot raw body', () => {
+  const secret = 'test-secret';
+  const timestamp = '1788120000';
+  const rawBody = '{"runId":"library-loop-test"}';
+  const expected = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');
+  const signature = createIngestSignature(secret, timestamp, rawBody);
+  assert.equal(signature, expected);
+  assert.match(signature, /^[0-9a-f]{64}$/);
+});
+
+test('uploader signs and sends the exact raw JSON contract', async () => {
+  const payload = validPayload();
   const secret = 'another-test-secret';
   const timestamp = '1788123456';
   let request;
@@ -67,4 +72,52 @@ test('uploader signs and sends the exact raw JSON contract', async () => {
     request.init.headers['x-library-loop-signature'],
     createHmac('sha256', secret).update(`${timestamp}.${request.init.body}`).digest('hex'),
   );
+});
+
+test('local payload size guard exactly matches the server byte limit', () => {
+  assert.equal(assertIngestBodySize('a'.repeat(MAX_INGEST_BODY_BYTES)), MAX_INGEST_BODY_BYTES);
+  assert.throws(
+    () => assertIngestBodySize('a'.repeat(MAX_INGEST_BODY_BYTES + 1)),
+    /1,500,000 byte server limit/,
+  );
+  assert.throws(
+    () => assertIngestBodySize('é'.repeat(Math.floor(MAX_INGEST_BODY_BYTES / 2) + 1)),
+    /1,500,000 byte server limit/,
+  );
+});
+
+test('uploader reports the bounded server error detail', async () => {
+  await assert.rejects(
+    uploadPayload(validPayload(), {
+      secret: 'test-secret',
+      timestamp: '1788123456',
+      endpoint: 'https://example.org/api/collector/ingest',
+      fetchImpl: async () => Response.json({ error: 'Collector timestamp is too far in the future' }, { status: 400 }),
+    }),
+    /HTTP 400: Collector timestamp is too far in the future/,
+  );
+});
+
+test('uploader returns the bounded successful write receipt', async () => {
+  const result = await uploadPayload(validPayload(), {
+    secret: 'test-secret',
+    timestamp: '1788123456',
+    endpoint: 'https://example.org/api/collector/ingest',
+    fetchImpl: async () => Response.json({
+      accepted: true,
+      eventCount: 1,
+      sourceCount: 1,
+      appliedSourceCount: 0,
+      staleSourceIds: ['justice-public-library'],
+      ignored: 'not copied',
+    }, { status: 202, headers: { 'x-request-id': 'receipt-test' } }),
+  });
+  assert.deepEqual(result, {
+    status: 202,
+    requestId: 'receipt-test',
+    eventCount: 1,
+    sourceCount: 1,
+    appliedSourceCount: 0,
+    staleSourceIds: ['justice-public-library'],
+  });
 });

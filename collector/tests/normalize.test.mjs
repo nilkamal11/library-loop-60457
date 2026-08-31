@@ -8,7 +8,7 @@ import {
   parseDateValue,
   validateIngestPayload,
 } from '../normalize.mjs';
-import { findSource } from '../sources.mjs';
+import { findSource, librarySources } from '../sources.mjs';
 
 const source = {
   ...findSource('justice-public-library'),
@@ -91,7 +91,42 @@ test('ingest validation requires explicit teenOnly and the exact source contract
   };
   assert.equal(event.teenOnly, true);
   assert.equal(validateIngestPayload(payload), true);
+  assert.throws(() => validateIngestPayload({ ...payload, sourceResults: [] }), /must contain 1 to/);
   const invalid = structuredClone(payload);
   delete invalid.sourceResults[0].events[0].teenOnly;
   assert.throws(() => validateIngestPayload(invalid), /teenOnly/);
+});
+
+test('local validation enforces the same 3000-event batch cap as the server', () => {
+  const template = normalizeCandidates([{
+    title: 'Family Game Night',
+    start: '2026-09-18T18:00:00-05:00',
+    description: 'Games for all ages.',
+    url: 'https://example.org/events/family-game-night',
+  }], source, window).events[0];
+  const sourceResult = (configuredSource, sourceIndex, count) => ({
+    sourceId: configuredSource.id,
+    sourceName: configuredSource.name,
+    status: 'success',
+    events: Array.from({ length: count }, (_, eventIndex) => ({
+      ...template,
+      id: `collector-${configuredSource.id}-${eventIndex}`,
+      source: configuredSource.name,
+      distance: configuredSource.distance,
+      registrationUrl: `https://example.org/events/${sourceIndex}-${eventIndex}`,
+      url: `https://example.org/events/${sourceIndex}-${eventIndex}`,
+    })),
+  });
+  const sourceResults = librarySources.slice(0, 15).map((configuredSource, sourceIndex) => sourceResult(configuredSource, sourceIndex, 200));
+  const payload = {
+    runId: 'library-loop-batch-limit-test',
+    collectedAt: '2026-08-30T20:00:00.000Z',
+    adapterVersion: 'library-loop-browser-v1',
+    sourceResults,
+  };
+  assert.equal(validateIngestPayload(payload), true);
+
+  const overLimit = structuredClone(payload);
+  overLimit.sourceResults.push(sourceResult(librarySources[15], 15, 1));
+  assert.throws(() => validateIngestPayload(overLimit), /cannot exceed 3000 events/);
 });

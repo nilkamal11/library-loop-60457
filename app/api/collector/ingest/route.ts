@@ -1,9 +1,9 @@
 import { collectorDatabase, collectorEnv, collectorRunExists, ensureCollectorSchema, writeCollectorBatch } from '@/lib/collector-db';
 import { parseCollectorBatch } from '@/lib/collector-contract';
+import { MAX_INGEST_BODY_BYTES } from '@/lib/collector-limits.mjs';
 
 export const runtime = 'edge';
 
-const MAX_BODY_BYTES = 1_500_000;
 const MAX_CLOCK_SKEW_SECONDS = 300;
 
 function hex(bytes: ArrayBuffer) {
@@ -25,7 +25,7 @@ async function expectedSignature(secret: string, timestamp: string, rawBody: str
 
 export async function POST(request: Request) {
   const contentLength = Number(request.headers.get('content-length') ?? '0');
-  if (contentLength > MAX_BODY_BYTES) return Response.json({ error: 'Payload too large' }, { status: 413 });
+  if (contentLength > MAX_INGEST_BODY_BYTES) return Response.json({ error: 'Payload too large' }, { status: 413 });
   const timestamp = request.headers.get('x-library-loop-timestamp') ?? '';
   const signature = request.headers.get('x-library-loop-signature')?.toLowerCase() ?? '';
   const timestampNumber = Number(timestamp);
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   if (!secret) return Response.json({ error: 'Collector authentication is not configured' }, { status: 503 });
 
   const rawBody = await request.text();
-  if (new TextEncoder().encode(rawBody).byteLength > MAX_BODY_BYTES) return Response.json({ error: 'Payload too large' }, { status: 413 });
+  if (new TextEncoder().encode(rawBody).byteLength > MAX_INGEST_BODY_BYTES) return Response.json({ error: 'Payload too large' }, { status: 413 });
   if (!/^[a-f0-9]{64}$/.test(signature) || !equalHex(signature, await expectedSignature(secret, timestamp, rawBody))) {
     return Response.json({ error: 'Invalid collector signature' }, { status: 401 });
   }
@@ -49,15 +49,24 @@ export async function POST(request: Request) {
   }
   const batch = parseCollectorBatch(parsed);
   if (!batch) return Response.json({ error: 'Collector payload failed validation' }, { status: 400 });
+  if (Date.parse(batch.collectedAt) > (timestampNumber + MAX_CLOCK_SKEW_SECONDS) * 1000) {
+    return Response.json({ error: 'Collector timestamp is too far in the future' }, { status: 400 });
+  }
 
   try {
     const database = collectorDatabase();
     await ensureCollectorSchema(database);
     if (await collectorRunExists(database, batch.runId)) return Response.json({ error: 'Run already received' }, { status: 409 });
     const bodyHash = hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawBody)));
-    const eventCount = await writeCollectorBatch(database, batch, bodyHash);
-    return Response.json({ accepted: true, runId: batch.runId, sourceCount: batch.sourceResults.length, eventCount }, { status: 202 });
+    const write = await writeCollectorBatch(database, batch, bodyHash);
+    return Response.json({
+      accepted: true,
+      runId: batch.runId,
+      sourceCount: batch.sourceResults.length,
+      ...write,
+    }, { status: 202 });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : 'Collector write failed' }, { status: 500 });
+    console.error('Collector write failed', error);
+    return Response.json({ error: 'Collector write failed' }, { status: 500 });
   }
 }

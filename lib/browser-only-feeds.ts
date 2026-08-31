@@ -220,6 +220,8 @@ export function mergeEventSources(server: EventsResponse, ...supplements: EventS
       empty: statuses.reduce((sum, status) => sum + status.empty, 0),
       failed: statuses.reduce((sum, status) => sum + status.failed, 0),
       failedSources: statuses.flatMap((status) => status.failedSources),
+      retained: statuses.reduce((sum, status) => sum + (status.retained ?? 0), 0),
+      retainedSources: statuses.flatMap((status) => status.retainedSources ?? []),
     },
   };
 }

@@ -35,6 +35,8 @@ export type EventsResponse = {
     empty: number;
     failed: number;
     failedSources: string[];
+    retained?: number;
+    retainedSources?: string[];
   };
 };
 

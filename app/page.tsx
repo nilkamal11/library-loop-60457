@@ -106,11 +106,16 @@ export default function Home() {
   };
 
   const sourceStatus = data?.sourceStatus;
+  const sourceIssueNote = sourceStatus?.failed
+    ? ` · ${sourceStatus.failed} ${sourceStatus.failed === 1 ? 'source is' : 'sources are'} temporarily unavailable`
+    : sourceStatus?.retained
+      ? ` · ${sourceStatus.retained} ${sourceStatus.retained === 1 ? 'source is' : 'sources are'} using last-known-good events`
+      : '';
   const liveNote = loadState === 'loading'
     ? 'Checking official calendars and registration links…'
     : loadState === 'error'
       ? 'The live refresh did not finish. Try again shortly or open Calendar sources for the official pages.'
-      : `${sourceStatus?.connected ?? 0} of ${sourceStatus?.attempted ?? 0} live sources responded · refreshed ${updatedLabel(data?.updatedAt)} CT`;
+      : `${sourceStatus?.connected ?? 0} of ${sourceStatus?.attempted ?? 0} live sources responded${sourceIssueNote} · refreshed ${updatedLabel(data?.updatedAt)} CT`;
 
   return (
     <main className="app-shell">
@@ -128,7 +133,13 @@ export default function Home() {
           <strong>{sourceStatus ? `${sourceStatus.connected} of ${sourceStatus.attempted}` : 'Connecting…'}</strong>
           <p>Official calendars plus permitted family-event discovery</p>
           <div className={`coverage-meter ${loadState === 'ready' ? 'connected' : ''}`}><span /></div>
-          <small>{sourceStatus ? `${sourceStatus.empty} connected calendars have no matching events this week` : 'Official listings are being checked'}</small>
+          <small>{sourceStatus
+            ? sourceStatus.failed
+              ? `${sourceStatus.failed} ${sourceStatus.failed === 1 ? 'source needs' : 'sources need'} another refresh`
+              : sourceStatus.retained
+                ? `${sourceStatus.retained} using last-known-good events`
+                : `${sourceStatus.empty} connected calendars have no matching events this week`
+            : 'Official listings are being checked'}</small>
         </section>
       </aside>
 

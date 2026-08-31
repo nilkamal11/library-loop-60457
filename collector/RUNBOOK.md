@@ -16,8 +16,8 @@ The collector uses conservative JSON-LD and semantic DOM extraction. It does not
 
 Run commands from the `dashboard` directory.
 
-1. Node.js 22.13 or newer.
-2. `playwright-core` resolvable by this project. This scaffold deliberately does not modify `package.json`; dependency installation is a separate setup action. For an existing shared runtime, set `LIBRARY_LOOP_PLAYWRIGHT_PATH` or pass `--playwright-path` with its `playwright-core` package directory. Do not hardcode a machine-specific cache path into source or a schedule.
+1. Node.js 22.18 or newer.
+2. Install the project dependencies with `pnpm install`; `playwright-core` is included. To use an existing external Playwright Core package instead, set `LIBRARY_LOOP_PLAYWRIGHT_PATH` or pass `--playwright-path` with its package directory. Do not hardcode a machine-specific cache path into source or a schedule.
 3. A system installation of Microsoft Edge or Google Chrome.
 
 The collector checks common Windows locations for Edge first and then Chrome. To use a different executable, set `LIBRARY_LOOP_BROWSER_PATH` or pass `--browser-path`.
@@ -59,7 +59,7 @@ Before enabling upload, review at least the first few runs source by source.
 - Confirm every accepted event is clearly for children, families, tweens, or teens.
 - Confirm teen-only events contain `"teenOnly": true`.
 - Inspect `review` entries in the audit file. The collector deliberately withholds events with ambiguous dates, unsafe URLs, or no audience signal.
-- Treat `empty` as “the page was reached but no confidently uploadable events were found,” not proof that the library has no events.
+- Treat `empty` as “the page was reached but no confidently uploadable events were found,” not proof that the library has no events. Production storage preserves the last-known-good snapshot for this outcome.
 - A `blocked` result is expected when robots disallow collection, a login or CAPTCHA appears, or HTTP 401/403 is returned.
 
 Do not weaken a block just to increase event counts. Add a reviewed, source-specific adapter instead.
@@ -89,7 +89,7 @@ The raw JSON body is exactly:
 }
 ```
 
-Each event uses the dashboard’s `LiveEvent` shape and must explicitly contain a boolean `teenOnly` field. Each source is capped at 200 events.
+Each event uses the dashboard’s `LiveEvent` shape and must explicitly contain a boolean `teenOnly` field. Each source is capped at 200 events, a batch at 3,000 events, and the signed UTF-8 body at 1,500,000 bytes.
 
 The uploader sends:
 
@@ -138,11 +138,11 @@ Use `LIBRARY_LOOP_INGEST_URL` or `--url` only for a deliberate endpoint override
 
 ## Exit behavior
 
-- Exit `0`: collection produced at least one successful or verified-empty source, and any requested upload succeeded.
+- Exit `0`: collection produced at least one successful or reachable-but-empty source, and any requested upload succeeded.
 - Exit `1`: setup, validation, artifact writing, or upload failed.
 - Exit `2`: every selected source failed or was blocked. Artifacts are still retained when collection reached the artifact step.
 
-Individual source failures do not cancel later sources. A production ingest should retain the last-known-good snapshot for failed or blocked sources.
+Individual source failures do not cancel later sources. A production ingest retains the last-known-good snapshot for empty, failed, or blocked sources, and ignores equal-timestamp or older source results.
 
 ## Validation
 
@@ -158,4 +158,6 @@ Check syntax without launching a browser:
 Get-ChildItem collector -Recurse -Filter *.mjs | ForEach-Object { node --check $_.FullName }
 ```
 
-Scheduling is intentionally not included in this scaffold. Only schedule the reviewed `--upload` command after the token, endpoint, browser dependency, power settings, and first source runs are verified.
+Scheduling is intentionally external to the repository. The production installation may schedule the reviewed `--upload` command after the token, endpoint, browser dependency, power settings, and first source runs are verified; cloning this repository never creates or modifies a scheduled task.
+
+On Windows, `scripts/run-overnight-collector.ps1` is the supported noninteractive entry point. It uses the system Node/Corepack installation and writes ignored logs under `collector/runs/scheduled/`. Running the script alone does not register a scheduled task or change power settings.

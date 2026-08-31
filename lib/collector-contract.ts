@@ -1,4 +1,6 @@
 import type { LiveEvent } from '@/lib/live-event';
+import { librarySources } from '@/collector/sources.mjs';
+import { MAX_EVENTS_PER_BATCH, MAX_EVENTS_PER_SOURCE } from '@/lib/collector-limits.mjs';
 
 export type CollectorStatus = 'success' | 'empty' | 'failed' | 'blocked';
 
@@ -17,27 +19,9 @@ export type CollectorBatch = {
   sourceResults: CollectorSourceResult[];
 };
 
-// Only calendars already listed in the site's 15-mile library inventory may write
-// to the overnight store. A new source must be deliberately added here first.
-export const OVERNIGHT_SOURCE_IDS = new Set([
-  'justice-public-library',
-  'bedford-park-public-library',
-  'hodgkins-public-library',
-  'summit-public-library',
-  'palos-park-public-library',
-  'hometown-public-library',
-  'lyons-public-library',
-  'crestwood-public-library',
-  'la-grange-park-public-library',
-  'william-leonard-public-library',
-  'forest-park-public-library',
-  'bellwood-public-library',
-  'maywood-public-library',
-  'markham-public-library',
-  'melrose-park-public-library',
-  'berkeley-public-library',
-  'harvey-public-library',
-]);
+// The reviewed local browser manifest is also the server write allowlist. A new
+// source must be deliberately added to collector/sources.mjs before it can write.
+export const OVERNIGHT_SOURCE_IDS = new Set<string>(librarySources.map((source) => source.id));
 
 const SOURCE_KINDS = new Set(['Library', 'Park district', 'Forest preserve', 'Recreation', 'Family guide']);
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
@@ -97,6 +81,7 @@ export function parseCollectorBatch(value: unknown): CollectorBatch | null {
     || Number.isNaN(Date.parse(value.collectedAt as string))
     || !boundedString(value.adapterVersion, 60)
     || !Array.isArray(value.sourceResults)
+    || value.sourceResults.length === 0
     || value.sourceResults.length > OVERNIGHT_SOURCE_IDS.size) return null;
 
   const seen = new Set<string>();
@@ -110,7 +95,7 @@ export function parseCollectorBatch(value: unknown): CollectorBatch | null {
       || !boundedString(candidate.sourceName, 180)
       || !['success', 'empty', 'failed', 'blocked'].includes(candidate.status as string)
       || !Array.isArray(candidate.events)
-      || candidate.events.length > 200
+      || candidate.events.length > MAX_EVENTS_PER_SOURCE
       || (candidate.error !== undefined && !boundedString(candidate.error, 500, false))) return null;
 
     const status = candidate.status as CollectorStatus;
@@ -119,7 +104,7 @@ export function parseCollectorBatch(value: unknown): CollectorBatch | null {
     if (status === 'success' && candidate.events.length === 0) return null;
     if (!candidate.events.every(isLiveEvent)) return null;
     totalEvents += candidate.events.length;
-    if (totalEvents > 3000) return null;
+    if (totalEvents > MAX_EVENTS_PER_BATCH) return null;
     seen.add(candidate.sourceId as string);
     sourceResults.push(candidate as unknown as CollectorSourceResult);
   }

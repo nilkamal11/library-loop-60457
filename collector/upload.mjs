@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { DEFAULT_INGEST_URL, INGEST_TOKEN_ENV, INGEST_URL_ENV } from './constants.mjs';
+import { DEFAULT_INGEST_URL, INGEST_TOKEN_ENV, INGEST_URL_ENV, MAX_INGEST_BODY_BYTES } from './constants.mjs';
 import { validateIngestPayload } from './normalize.mjs';
 
 function windowsUserEnvironmentValue(name) {
@@ -43,10 +43,50 @@ function validateEndpoint(value) {
   return url.toString();
 }
 
+export function assertIngestBodySize(rawBody) {
+  if (typeof rawBody !== 'string') throw new TypeError('Collector ingest body must be a string.');
+  const bytes = Buffer.byteLength(rawBody, 'utf8');
+  if (bytes > MAX_INGEST_BODY_BYTES) {
+    throw new Error(`Collector ingest payload exceeds the ${MAX_INGEST_BODY_BYTES.toLocaleString('en-US')} byte server limit.`);
+  }
+  return bytes;
+}
+
+async function responseError(response) {
+  if (response.headers.get('content-type')?.toLowerCase().includes('application/json')) {
+    try {
+      const payload = await response.json();
+      const detail = typeof payload?.error === 'string' ? payload.error.replace(/\s+/g, ' ').trim().slice(0, 240) : '';
+      if (detail) return `Collector ingest returned HTTP ${response.status}: ${detail}`;
+    } catch {
+      // Fall through to the bounded generic error below.
+    }
+  }
+  return `Collector ingest returned HTTP ${response.status}.`;
+}
+
+async function responseReceipt(response) {
+  if (!response.headers.get('content-type')?.toLowerCase().includes('application/json')) return {};
+  try {
+    const payload = await response.json();
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return {};
+    const receipt = {};
+    for (const key of ['eventCount', 'sourceCount', 'appliedSourceCount']) {
+      if (Number.isInteger(payload[key]) && payload[key] >= 0) receipt[key] = payload[key];
+    }
+    if (Array.isArray(payload.staleSourceIds)) {
+      receipt.staleSourceIds = payload.staleSourceIds.filter((value) => typeof value === 'string').slice(0, 100);
+    }
+    return receipt;
+  } catch {
+    return {};
+  }
+}
+
 export async function uploadPayload(payload, options = {}) {
   validateIngestPayload(payload);
   const rawBody = JSON.stringify(payload);
-  if (Buffer.byteLength(rawBody, 'utf8') > 5_000_000) throw new Error('Collector ingest payload exceeds the 5 MB local safety limit.');
+  assertIngestBodySize(rawBody);
   const secret = options.secret ?? readIngestSecret();
   const timestamp = String(options.timestamp ?? Math.floor(Date.now() / 1_000));
   const signature = createIngestSignature(secret, timestamp, rawBody);
@@ -66,10 +106,12 @@ export async function uploadPayload(payload, options = {}) {
       body: rawBody,
       signal: controller.signal,
     });
-    if (!response.ok) throw new Error(`Collector ingest returned HTTP ${response.status}.`);
+    if (!response.ok) throw new Error(await responseError(response));
+    const receipt = await responseReceipt(response);
     return {
       status: response.status,
       requestId: response.headers.get('x-request-id') ?? response.headers.get('cf-ray') ?? '',
+      ...receipt,
     };
   } finally {
     clearTimeout(timer);

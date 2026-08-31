@@ -18,6 +18,14 @@ export const COLLECTOR_SCHEMA = [
     error TEXT,
     consecutive_failures INTEGER NOT NULL DEFAULT 0
   )`,
+  `CREATE TABLE IF NOT EXISTS collector_run_sources (
+    run_id TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    applied INTEGER NOT NULL,
+    event_count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (run_id, source_id)
+  )`,
   `CREATE TABLE IF NOT EXISTS collector_events (
     source_id TEXT NOT NULL,
     event_id TEXT NOT NULL,

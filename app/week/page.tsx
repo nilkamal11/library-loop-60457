@@ -94,7 +94,7 @@ export default function WeekPage() {
           <span>{loadState === 'ready' ? 'Live feeds' : loadState === 'error' ? 'Refresh issue' : 'Connecting'}</span>
           {loadState === 'loading' && 'Checking official calendars and signup links…'}
           {loadState === 'error' && 'The live refresh did not finish. Try again shortly.'}
-          {loadState === 'ready' && `${sourceStatus?.connected ?? 0} of ${sourceStatus?.attempted ?? 0} live sources responded. Select any event to open its official listing.`}
+          {loadState === 'ready' && `${sourceStatus?.connected ?? 0} of ${sourceStatus?.attempted ?? 0} live sources responded${sourceStatus?.failed ? `; ${sourceStatus.failed} ${sourceStatus.failed === 1 ? 'source is' : 'sources are'} temporarily unavailable` : sourceStatus?.retained ? `; ${sourceStatus.retained} ${sourceStatus.retained === 1 ? 'source is' : 'sources are'} using last-known-good events` : ''}. Select any event to open its official listing.`}
         </div>
 
         <div className="filters" aria-label="Week filters">

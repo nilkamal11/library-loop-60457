@@ -14,11 +14,11 @@ export async function GET(request: Request) {
     await ensureCollectorSchema(database);
     const result = await readCollectorEvents(database, start, end);
     return Response.json(result, { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600' } });
-  } catch (error) {
+  } catch {
     return Response.json({
       events: [],
       sourceStatus: { attempted: 0, connected: 0, empty: 0, failed: 0, failedSources: [] },
-      unavailable: error instanceof Error ? error.message : 'Overnight event storage is unavailable',
-    }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+      error: 'Overnight event storage is temporarily unavailable',
+    }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
   }
 }
