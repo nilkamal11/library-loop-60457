@@ -12,9 +12,7 @@ import {
   type EventsResponse,
   type LiveEvent,
 } from '@/lib/live-event';
-import { fetchDailyEvents } from '@/lib/daily-events';
-import { mergeEventSources } from '@/lib/browser-only-feeds';
-import { fetchOvernightEvents } from '@/lib/overnight-events';
+import { fetchCalendarSnapshot } from '@/lib/calendar-snapshot';
 
 const categoryCycle = ['All types', 'Make', 'Build', 'Play', 'Read', 'Create', 'Outdoor', 'Music', 'Explore'];
 
@@ -51,22 +49,15 @@ export default function Home() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void (async () => {
-      try {
-        const overnightData = await fetchOvernightEvents(weekStart, controller.signal);
-        setData(overnightData);
+    fetchCalendarSnapshot(weekStart, controller.signal)
+      .then((snapshot) => {
+        setData(snapshot);
         setLoadState('ready');
-        try {
-          const dailyData = await fetchDailyEvents(weekStart, controller.signal);
-          setData(mergeEventSources(dailyData, overnightData));
-        } catch {
-          // Keep the usable overnight snapshot visible when the larger daily refresh is slow.
-        }
-      } catch (error: unknown) {
+      })
+      .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === 'AbortError') return;
         setLoadState('error');
-      }
-    })();
+      });
     return () => controller.abort();
   }, [weekStart]);
 
