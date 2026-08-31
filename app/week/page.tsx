@@ -22,18 +22,22 @@ export default function WeekPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([
-      fetchDailyEvents(weekStart, controller.signal),
-      fetchOvernightEvents(weekStart, controller.signal),
-    ])
-      .then(([dailyData, overnightData]) => {
-        setData(mergeEventSources(dailyData, overnightData));
+    void (async () => {
+      try {
+        const overnightData = await fetchOvernightEvents(weekStart, controller.signal);
+        setData(overnightData);
         setLoadState('ready');
-      })
-      .catch((error: unknown) => {
+        try {
+          const dailyData = await fetchDailyEvents(weekStart, controller.signal);
+          setData(mergeEventSources(dailyData, overnightData));
+        } catch {
+          // Keep the usable overnight snapshot visible when the larger daily refresh is slow.
+        }
+      } catch (error: unknown) {
         if (error instanceof DOMException && error.name === 'AbortError') return;
         setLoadState('error');
-      });
+      }
+    })();
     return () => controller.abort();
   }, [weekStart]);
 
