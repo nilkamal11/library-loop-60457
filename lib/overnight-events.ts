@@ -1,11 +1,13 @@
 import type { EventsResponse } from '@/lib/live-event';
 import { librarySources } from '../collector/sources.mjs';
 
-type EventSupplement = Pick<EventsResponse, 'events' | 'sourceStatus'>;
+type EventSupplement = EventsResponse;
 
-function unavailableSupplement(): EventSupplement {
+function unavailableSupplement(start: string): EventSupplement {
   return {
     events: [],
+    updatedAt: '',
+    window: { start, end: start, days: 7 },
     sourceStatus: {
       attempted: librarySources.length,
       connected: 0,
@@ -29,11 +31,11 @@ export async function fetchOvernightEvents(start: string, externalSignal?: Abort
   try {
     const signal = externalSignal ? AbortSignal.any([externalSignal, AbortSignal.timeout(8000)]) : AbortSignal.timeout(8000);
     const response = await fetchImpl(`/api/collector/events?start=${encodeURIComponent(start)}&days=7`, { signal });
-    if (!response.ok) return unavailableSupplement();
+    if (!response.ok) return unavailableSupplement(start);
     const payload: unknown = await response.json();
-    return isEventSupplement(payload) ? payload : unavailableSupplement();
+    return isEventSupplement(payload) ? payload : unavailableSupplement(start);
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError' && externalSignal?.aborted) throw error;
-    return unavailableSupplement();
+    return unavailableSupplement(start);
   }
 }

@@ -25,6 +25,7 @@ type SourceRow = {
   last_success_at: string | null;
 };
 type RunSourceRow = { source_id: string; applied: number; event_count: number };
+type RunRow = { collected_at: string };
 
 type SourceWriteRecord = {
   sourceId: string;
@@ -119,13 +120,15 @@ export async function writeCollectorBatch(database: D1Database, batch: Collector
   };
 }
 
-export async function readCollectorEvents(database: D1Database, start: string, end: string): Promise<Pick<EventsResponse, 'events' | 'sourceStatus'>> {
-  const [eventRows, sourceRows] = await Promise.all([
+export async function readCollectorEvents(database: D1Database, start: string, end: string): Promise<EventsResponse> {
+  const [eventRows, sourceRows, latestRun] = await Promise.all([
     database.prepare(`SELECT event_json FROM collector_events
       WHERE event_date >= ? AND event_date < ?
       ORDER BY start_local ASC`).bind(start, end).all<EventRow>(),
     database.prepare(`SELECT source_name, status, event_count, error, last_success_at FROM collector_sources
       ORDER BY source_name ASC`).all<SourceRow>(),
+    database.prepare(`SELECT collected_at FROM collector_runs
+      ORDER BY received_at DESC LIMIT 1`).first<RunRow>(),
   ]);
   const events = eventRows.results.map((row) => {
     try {
@@ -140,6 +143,8 @@ export async function readCollectorEvents(database: D1Database, start: string, e
   const retained = rows.filter((row) => row.status !== 'success' && Boolean(row.last_success_at));
   return {
     events,
+    updatedAt: latestRun?.collected_at ?? '',
+    window: { start, end, days: Math.max(1, Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000)) },
     sourceStatus: {
       attempted: rows.length,
       connected: connected.length,

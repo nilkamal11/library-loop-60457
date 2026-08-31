@@ -12,8 +12,8 @@ import {
   type EventsResponse,
   type LiveEvent,
 } from '@/lib/live-event';
-import { fetchBrowserOnlyEvents, mergeEventSources } from '@/lib/browser-only-feeds';
-import { fetchDiscoveryEvents } from '@/lib/discovery-events';
+import { fetchDailyEvents } from '@/lib/daily-events';
+import { mergeEventSources } from '@/lib/browser-only-feeds';
 import { fetchOvernightEvents } from '@/lib/overnight-events';
 
 const categoryCycle = ['All types', 'Make', 'Build', 'Play', 'Read', 'Create', 'Outdoor', 'Music', 'Explore'];
@@ -52,16 +52,11 @@ export default function Home() {
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([
-      fetch(`/api/events?start=${weekStart}&days=7&feed_version=7`, { signal: controller.signal }).then((response) => {
-        if (!response.ok) throw new Error('Event refresh failed');
-        return response.json() as Promise<EventsResponse>;
-      }),
-      fetchBrowserOnlyEvents(weekStart, controller.signal),
-      fetchDiscoveryEvents(weekStart, controller.signal),
+      fetchDailyEvents(weekStart, controller.signal),
       fetchOvernightEvents(weekStart, controller.signal),
     ])
-      .then(([serverData, browserData, discoveryData, overnightData]) => {
-        setData(mergeEventSources(serverData, browserData, discoveryData, overnightData));
+      .then(([dailyData, overnightData]) => {
+        setData(mergeEventSources(dailyData, overnightData));
         setLoadState('ready');
       })
       .catch((error: unknown) => {
@@ -112,10 +107,10 @@ export default function Home() {
       ? ` · ${sourceStatus.retained} ${sourceStatus.retained === 1 ? 'source is' : 'sources are'} using last-known-good events`
       : '';
   const liveNote = loadState === 'loading'
-    ? 'Checking official calendars and registration links…'
+    ? 'Loading today’s saved calendar snapshot…'
     : loadState === 'error'
       ? 'The live refresh did not finish. Try again shortly or open Calendar sources for the official pages.'
-      : `${sourceStatus?.connected ?? 0} of ${sourceStatus?.attempted ?? 0} live sources responded${sourceIssueNote} · refreshed ${updatedLabel(data?.updatedAt)} CT`;
+      : `${sourceStatus?.connected ?? 0} of ${sourceStatus?.attempted ?? 0} daily sources available${sourceIssueNote} · updated ${updatedLabel(data?.updatedAt)} CT`;
 
   return (
     <main className="app-shell">
@@ -129,9 +124,9 @@ export default function Home() {
         </nav>
         <div className="sidebar-spacer" />
         <section className="coverage-card" aria-label="Live feed coverage">
-          <p className="eyebrow">Live feed check</p>
+          <p className="eyebrow">Daily calendar snapshot</p>
           <strong>{sourceStatus ? `${sourceStatus.connected} of ${sourceStatus.attempted}` : 'Connecting…'}</strong>
-          <p>Official calendars plus permitted family-event discovery</p>
+          <p>Official events refreshed once each day</p>
           <div className={`coverage-meter ${loadState === 'ready' ? 'connected' : ''}`}><span /></div>
           <small>{sourceStatus
             ? sourceStatus.failed
@@ -139,7 +134,7 @@ export default function Home() {
               : sourceStatus.retained
                 ? `${sourceStatus.retained} using last-known-good events`
                 : `${sourceStatus.empty} connected calendars have no matching events this week`
-            : 'Official listings are being checked'}</small>
+            : 'Today’s saved events are loading'}</small>
         </section>
       </aside>
 
@@ -149,7 +144,7 @@ export default function Home() {
           <button className="location-button" type="button" title="The starting ZIP for this calendar"><span className="location-dot" aria-hidden="true" /> 60457 <span aria-hidden="true">15 mi</span></button>
         </header>
 
-        <div className={`preview-note live-feed-note ${loadState}`} role="status"><span>{loadState === 'ready' ? 'Live feeds' : loadState === 'error' ? 'Refresh issue' : 'Connecting'}</span>{liveNote}</div>
+        <div className={`preview-note live-feed-note ${loadState}`} role="status"><span>{loadState === 'ready' ? 'Daily snapshot' : loadState === 'error' ? 'Refresh issue' : 'Loading'}</span>{liveNote}</div>
 
         <section className="date-strip" aria-label="Choose a date">
           <button className="month-button" onClick={() => changeWeek(-1)} type="button" aria-label="Previous week">‹</button>
@@ -172,7 +167,7 @@ export default function Home() {
           <section className="agenda">
             <div className="section-heading"><div><span className="today-dot" /> {selectedKey === todayKey ? 'Today’s agenda' : dates[selectedDate].label}</div><span>{visibleEvents.length} live {visibleEvents.length === 1 ? 'event' : 'events'}</span></div>
             {loadState === 'loading' ? (
-              <div className="empty-state loading-state"><span aria-hidden="true">↻</span><h2>Checking nearby calendars</h2><p>Dates, signup status, and official links are loading now.</p></div>
+              <div className="empty-state loading-state"><span aria-hidden="true">↻</span><h2>Loading today’s saved events</h2><p>The dashboard does not contact library calendars during this page load.</p></div>
             ) : visibleEvents.length ? (
               <div className="timeline">
                 {visibleEvents.map((event) => {

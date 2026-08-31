@@ -9,8 +9,8 @@ import {
   makeDateStrip,
   type EventsResponse,
 } from '@/lib/live-event';
-import { fetchBrowserOnlyEvents, mergeEventSources } from '@/lib/browser-only-feeds';
-import { fetchDiscoveryEvents } from '@/lib/discovery-events';
+import { fetchDailyEvents } from '@/lib/daily-events';
+import { mergeEventSources } from '@/lib/browser-only-feeds';
 import { fetchOvernightEvents } from '@/lib/overnight-events';
 
 export default function WeekPage() {
@@ -23,16 +23,11 @@ export default function WeekPage() {
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([
-      fetch(`/api/events?start=${weekStart}&days=7&feed_version=7`, { signal: controller.signal }).then((response) => {
-        if (!response.ok) throw new Error('Event refresh failed');
-        return response.json() as Promise<EventsResponse>;
-      }),
-      fetchBrowserOnlyEvents(weekStart, controller.signal),
-      fetchDiscoveryEvents(weekStart, controller.signal),
+      fetchDailyEvents(weekStart, controller.signal),
       fetchOvernightEvents(weekStart, controller.signal),
     ])
-      .then(([serverData, browserData, discoveryData, overnightData]) => {
-        setData(mergeEventSources(serverData, browserData, discoveryData, overnightData));
+      .then(([dailyData, overnightData]) => {
+        setData(mergeEventSources(dailyData, overnightData));
         setLoadState('ready');
       })
       .catch((error: unknown) => {
@@ -73,9 +68,9 @@ export default function WeekPage() {
           <a className="nav-link" href="/sources"><span aria-hidden="true">↻</span> Calendar sources</a>
         </nav>
         <div className="sidebar-spacer" />
-        <section className="coverage-card" aria-label="Live week coverage">
-          <p className="eyebrow">This live week</p><strong>{loadState === 'loading' ? 'Checking…' : `${eventCount} events`}</strong>
-          <p>{sourceStatus ? `${sourceStatus.connected} live sources responded` : 'Nearby sources are loading'}<br />for kids + family{showTeenEvents ? ' + teens' : ''}</p>
+        <section className="coverage-card" aria-label="Daily week coverage">
+          <p className="eyebrow">This daily week</p><strong>{loadState === 'loading' ? 'Loading…' : `${eventCount} events`}</strong>
+          <p>{sourceStatus ? `${sourceStatus.connected} daily sources available` : 'Today’s saved events are loading'}<br />for kids + family{showTeenEvents ? ' + teens' : ''}</p>
           <div className={`coverage-meter ${loadState === 'ready' ? 'connected' : ''}`}><span /></div><small>Within the 15 mile search</small>
         </section>
       </aside>
@@ -91,10 +86,10 @@ export default function WeekPage() {
         </header>
 
         <div className={`preview-note live-feed-note ${loadState}`} role="status">
-          <span>{loadState === 'ready' ? 'Live feeds' : loadState === 'error' ? 'Refresh issue' : 'Connecting'}</span>
-          {loadState === 'loading' && 'Checking official calendars and signup links…'}
+          <span>{loadState === 'ready' ? 'Daily snapshot' : loadState === 'error' ? 'Refresh issue' : 'Loading'}</span>
+          {loadState === 'loading' && 'Loading today’s saved calendar snapshot…'}
           {loadState === 'error' && 'The live refresh did not finish. Try again shortly.'}
-          {loadState === 'ready' && `${sourceStatus?.connected ?? 0} of ${sourceStatus?.attempted ?? 0} live sources responded${sourceStatus?.failed ? `; ${sourceStatus.failed} ${sourceStatus.failed === 1 ? 'source is' : 'sources are'} temporarily unavailable` : sourceStatus?.retained ? `; ${sourceStatus.retained} ${sourceStatus.retained === 1 ? 'source is' : 'sources are'} using last-known-good events` : ''}. Select any event to open its official listing.`}
+          {loadState === 'ready' && `${sourceStatus?.connected ?? 0} of ${sourceStatus?.attempted ?? 0} daily sources available${sourceStatus?.failed ? `; ${sourceStatus.failed} ${sourceStatus.failed === 1 ? 'source is' : 'sources are'} temporarily unavailable` : sourceStatus?.retained ? `; ${sourceStatus.retained} ${sourceStatus.retained === 1 ? 'source is' : 'sources are'} using last-known-good events` : ''}. Select any event to open its official listing.`}
         </div>
 
         <div className="filters" aria-label="Week filters">
@@ -102,9 +97,9 @@ export default function WeekPage() {
         </div>
 
         {loadState === 'loading' ? (
-          <div className="empty-state week-loading"><span aria-hidden="true">↻</span><h2>Building the live week</h2><p>Dates, locations, and registration information are loading now.</p></div>
+          <div className="empty-state week-loading"><span aria-hidden="true">↻</span><h2>Loading today’s saved week</h2><p>The dashboard is not contacting calendars during this page load.</p></div>
         ) : (
-          <section className="week-board" aria-label="Live events for the week">
+          <section className="week-board" aria-label="Daily events for the week">
             {dates.map((day) => {
               const events = eventsByDate.get(day.key) ?? [];
               return (

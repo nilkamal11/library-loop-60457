@@ -1035,6 +1035,6 @@ export async function GET(request: Request) {
       failedSources,
     },
   }, {
-    headers: { 'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=21600' },
+    headers: { 'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400' },
   });
 }
