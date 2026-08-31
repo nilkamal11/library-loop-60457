@@ -1,4 +1,5 @@
-import { addDays, chicagoTodayKey, type LiveEvent, type SourceKind } from '@/lib/live-event';
+import { addDays, chicagoTodayKey, type EventsResponse, type LiveEvent, type SourceKind } from '@/lib/live-event';
+import { collectorDatabase, ensureCollectorSchema, readDailyCalendarSnapshot, writeDailyCalendarSnapshot } from '@/lib/collector-db';
 
 export const runtime = 'edge';
 
@@ -1007,17 +1008,23 @@ async function settledPool<T, R>(items: T[], limit: number, worker: (item: T) =>
 }
 
 export async function GET(request: Request) {
-  const cache = typeof caches === 'undefined' ? null : (caches as CacheStorage & { default?: Cache }).default ?? null;
-  const cacheKey = new Request(request.url, { method: 'GET' });
-  if (cache) {
-    const cached = await cache.match(cacheKey);
-    if (cached) return cached;
-  }
   const query = new URL(request.url).searchParams;
   const requestedStart = query.get('start') ?? chicagoTodayKey();
   const start = /^\d{4}-\d{2}-\d{2}$/.test(requestedStart) ? requestedStart : chicagoTodayKey();
   const days = Math.min(7, Math.max(1, Number.parseInt(query.get('days') ?? '7', 10) || 7));
   const end = addDays(start, days);
+  const snapshotKey = `${start}|${days}`;
+  let database: D1Database | null = null;
+  try {
+    database = collectorDatabase();
+    await ensureCollectorSchema(database);
+    if (query.get('refresh') !== '1') {
+      const saved = await readDailyCalendarSnapshot(database, snapshotKey);
+      if (saved) return Response.json(saved, { headers: { 'Cache-Control': 'public, max-age=300' } });
+    }
+  } catch {
+    database = null;
+  }
   const results = await settledPool(feeds, 5, async (feed) => ({ feed, events: await fetchFeed(feed, start, end) }));
   const successful = results.filter((result): result is PromiseFulfilledResult<{ feed: FeedConfig; events: LiveEvent[] }> => result.status === 'fulfilled');
   const failedSources = results.flatMap((result, index) => result.status === 'rejected' ? [feeds[index].name] : []);
@@ -1029,7 +1036,7 @@ export async function GET(request: Request) {
     }
   }
   const events = [...deduped.values()].sort((a, b) => a.startLocal.localeCompare(b.startLocal) || a.distance - b.distance);
-  const response = Response.json({
+  const payload: EventsResponse = {
     events,
     updatedAt: new Date().toISOString(),
     window: { start, end: addDays(end, -1), days },
@@ -1040,9 +1047,9 @@ export async function GET(request: Request) {
       failed: failedSources.length,
       failedSources,
     },
-  }, {
-    headers: { 'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400' },
-  });
-  if (cache) await cache.put(cacheKey, response.clone());
-  return response;
+  };
+  if (database) {
+    try { await writeDailyCalendarSnapshot(database, snapshotKey, payload); } catch { /* return the usable live result */ }
+  }
+  return Response.json(payload, { headers: { 'Cache-Control': 'public, max-age=300' } });
 }

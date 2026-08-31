@@ -36,4 +36,9 @@ export const COLLECTOR_SCHEMA = [
     PRIMARY KEY (source_id, event_id)
   )`,
   'CREATE INDEX IF NOT EXISTS collector_events_date_idx ON collector_events (event_date, start_local)',
+  `CREATE TABLE IF NOT EXISTS daily_calendar_snapshots (
+    snapshot_key TEXT PRIMARY KEY,
+    payload_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
 ] as const;

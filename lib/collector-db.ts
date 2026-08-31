@@ -156,3 +156,22 @@ export async function readCollectorEvents(database: D1Database, start: string, e
     },
   };
 }
+
+export async function readDailyCalendarSnapshot(database: D1Database, snapshotKey: string): Promise<EventsResponse | null> {
+  const row = await database.prepare('SELECT payload_json FROM daily_calendar_snapshots WHERE snapshot_key = ? LIMIT 1')
+    .bind(snapshotKey).first<{ payload_json: string }>();
+  if (!row) return null;
+  try {
+    const payload = JSON.parse(row.payload_json) as EventsResponse;
+    return Array.isArray(payload.events) && payload.sourceStatus && typeof payload.updatedAt === 'string' ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function writeDailyCalendarSnapshot(database: D1Database, snapshotKey: string, payload: EventsResponse) {
+  await database.prepare(`INSERT INTO daily_calendar_snapshots (snapshot_key, payload_json, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(snapshot_key) DO UPDATE SET payload_json = excluded.payload_json, updated_at = excluded.updated_at`)
+    .bind(snapshotKey, JSON.stringify(payload), payload.updatedAt).run();
+}

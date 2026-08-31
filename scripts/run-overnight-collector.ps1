@@ -27,7 +27,7 @@ try {
     $collectorExitCode = $LASTEXITCODE
     if ($Mode -eq 'upload' -and $collectorExitCode -eq 0) {
       $snapshotDate = (Get-Date).ToString('yyyy-MM-dd')
-      $snapshotUrl = "https://library-loop-60457.nilkamals463352.chatgpt.site/api/events?start=$snapshotDate&days=7&snapshot=$snapshotDate"
+      $snapshotUrl = "https://library-loop-60457.nilkamals463352.chatgpt.site/api/events?start=$snapshotDate&days=7&refresh=1"
       $snapshotResponse = Invoke-WebRequest -Uri $snapshotUrl -UseBasicParsing -TimeoutSec 180
       if ($snapshotResponse.StatusCode -lt 200 -or $snapshotResponse.StatusCode -ge 300) {
         throw "Daily calendar snapshot returned HTTP $($snapshotResponse.StatusCode)."
