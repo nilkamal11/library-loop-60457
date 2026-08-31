@@ -1007,6 +1007,12 @@ async function settledPool<T, R>(items: T[], limit: number, worker: (item: T) =>
 }
 
 export async function GET(request: Request) {
+  const cache = typeof caches === 'undefined' ? null : (caches as CacheStorage & { default?: Cache }).default ?? null;
+  const cacheKey = new Request(request.url, { method: 'GET' });
+  if (cache) {
+    const cached = await cache.match(cacheKey);
+    if (cached) return cached;
+  }
   const query = new URL(request.url).searchParams;
   const requestedStart = query.get('start') ?? chicagoTodayKey();
   const start = /^\d{4}-\d{2}-\d{2}$/.test(requestedStart) ? requestedStart : chicagoTodayKey();
@@ -1023,7 +1029,7 @@ export async function GET(request: Request) {
     }
   }
   const events = [...deduped.values()].sort((a, b) => a.startLocal.localeCompare(b.startLocal) || a.distance - b.distance);
-  return Response.json({
+  const response = Response.json({
     events,
     updatedAt: new Date().toISOString(),
     window: { start, end: addDays(end, -1), days },
@@ -1037,4 +1043,6 @@ export async function GET(request: Request) {
   }, {
     headers: { 'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400' },
   });
+  if (cache) await cache.put(cacheKey, response.clone());
+  return response;
 }
