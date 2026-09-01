@@ -23,7 +23,9 @@ try {
       'dry-run' { @('pnpm', 'run', 'collect:dry-run') }
       'list-sources' { @('pnpm', 'exec', 'node', 'collector/run.mjs', '--list-sources') }
     }
-    & $corepackPath @arguments 2>&1 | Out-File -LiteralPath $logPath -Append -Encoding utf8
+    # Use direct all-stream redirection instead of a pipeline so ordinary pnpm
+    # stderr cannot terminate the wrapper after a successful upload.
+    & $corepackPath @arguments *> $logPath
     $collectorExitCode = $LASTEXITCODE
     if ($Mode -eq 'upload' -and $collectorExitCode -eq 0) {
       $snapshotDate = (Get-Date).ToString('yyyy-MM-dd')

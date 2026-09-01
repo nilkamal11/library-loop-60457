@@ -45,7 +45,7 @@ export default function WeekPage() {
   }, [visibleEvents]);
   const eventCount = visibleEvents.length;
   const sourceStatus = data?.sourceStatus;
-  const totalSources = Math.max(sourceStatus?.attempted ?? 0, 97);
+  const totalSources = sourceStatus?.attempted ?? 0;
 
   const changeWeek = (amount: number) => {
     setLoadState('loading');

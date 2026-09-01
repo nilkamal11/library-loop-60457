@@ -52,6 +52,8 @@ export default function Home() {
     fetchCalendarSnapshot(weekStart, controller.signal)
       .then((snapshot) => {
         setData(snapshot);
+        const firstVisibleDate = dates.findIndex((date) => snapshot.events.some((event) => event.dateKey === date.key && !event.teenOnly));
+        setSelectedDate(firstVisibleDate >= 0 ? firstVisibleDate : 0);
         setLoadState('ready');
       })
       .catch((error: unknown) => {
@@ -96,7 +98,7 @@ export default function Home() {
   };
 
   const sourceStatus = data?.sourceStatus;
-  const totalSources = Math.max(sourceStatus?.attempted ?? 0, 97);
+  const totalSources = sourceStatus?.attempted ?? 0;
   const sourceIssueNote = sourceStatus?.failed
     ? ` · ${sourceStatus.failed} ${sourceStatus.failed === 1 ? 'source is' : 'sources are'} temporarily unavailable`
     : sourceStatus?.retained
