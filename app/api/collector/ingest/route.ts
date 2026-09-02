@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   if (!/^\d{10}$/.test(timestamp) || Math.abs(Date.now() / 1000 - timestampNumber) > MAX_CLOCK_SKEW_SECONDS) {
     return Response.json({ error: 'Stale or invalid request timestamp' }, { status: 401 });
   }
-  const secret = collectorEnv().LIBRARY_LOOP_INGEST_TOKEN;
+  const secret = (await collectorEnv()).LIBRARY_LOOP_INGEST_TOKEN;
   if (!secret) return Response.json({ error: 'Collector authentication is not configured' }, { status: 503 });
 
   const rawBody = await request.text();
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const database = collectorDatabase();
+    const database = await collectorDatabase();
     await ensureCollectorSchema(database);
     if (await collectorRunExists(database, batch.runId)) return Response.json({ error: 'Run already received' }, { status: 409 });
     const bodyHash = hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawBody)));

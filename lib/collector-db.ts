@@ -1,4 +1,3 @@
-import { env } from 'cloudflare:workers';
 import { COLLECTOR_SCHEMA } from '@/db/schema';
 import type { CollectorBatch, CollectorSourceResult } from '@/lib/collector-contract';
 import type { EventsResponse, LiveEvent } from '@/lib/live-event';
@@ -21,11 +20,11 @@ type SourceRow = {
   source_name: string;
   status: string;
   event_count: number;
+  collected_at: string;
   error: string | null;
   last_success_at: string | null;
 };
 type RunSourceRow = { source_id: string; applied: number; event_count: number };
-type RunRow = { collected_at: string };
 
 type SourceWriteRecord = {
   sourceId: string;
@@ -40,16 +39,23 @@ type SourceWriteRecord = {
   events: LiveEvent[];
 };
 
-export function collectorEnv() {
-  const bindings = env as CollectorEnv;
+export async function collectorEnv() {
+  let bindings = {} as CollectorEnv;
+  try {
+    const workers = await import('cloudflare:workers');
+    bindings = workers.env as CollectorEnv;
+  } catch {
+    // The Node preview server does not provide Cloudflare runtime bindings.
+  }
+  const processToken = typeof process === 'undefined' ? undefined : process.env.LIBRARY_LOOP_INGEST_TOKEN;
   return {
     ...bindings,
-    LIBRARY_LOOP_INGEST_TOKEN: bindings.LIBRARY_LOOP_INGEST_TOKEN ?? process.env.LIBRARY_LOOP_INGEST_TOKEN,
+    LIBRARY_LOOP_INGEST_TOKEN: bindings.LIBRARY_LOOP_INGEST_TOKEN ?? processToken,
   } as CollectorEnv;
 }
 
-export function collectorDatabase() {
-  const database = collectorEnv().DB;
+export async function collectorDatabase() {
+  const database = (await collectorEnv()).DB;
   if (!database) throw new Error('Overnight event storage is not configured');
   return database;
 }
@@ -121,14 +127,12 @@ export async function writeCollectorBatch(database: D1Database, batch: Collector
 }
 
 export async function readCollectorEvents(database: D1Database, start: string, end: string): Promise<EventsResponse> {
-  const [eventRows, sourceRows, latestRun] = await Promise.all([
+  const [eventRows, sourceRows] = await Promise.all([
     database.prepare(`SELECT event_json FROM collector_events
       WHERE event_date >= ? AND event_date < ?
       ORDER BY start_local ASC`).bind(start, end).all<EventRow>(),
-    database.prepare(`SELECT source_name, status, event_count, error, last_success_at FROM collector_sources
+    database.prepare(`SELECT source_name, status, event_count, collected_at, error, last_success_at FROM collector_sources
       ORDER BY source_name ASC`).all<SourceRow>(),
-    database.prepare(`SELECT collected_at FROM collector_runs
-      ORDER BY received_at DESC LIMIT 1`).first<RunRow>(),
   ]);
   const events = eventRows.results.map((row) => {
     try {
@@ -141,9 +145,10 @@ export async function readCollectorEvents(database: D1Database, start: string, e
   const connected = rows.filter((row) => row.status === 'success' || row.status === 'empty');
   const failed = rows.filter((row) => row.status === 'failed' || row.status === 'blocked');
   const retained = rows.filter((row) => row.status !== 'success' && Boolean(row.last_success_at));
+  const updatedAt = rows.reduce((latest, row) => row.collected_at > latest ? row.collected_at : latest, '');
   return {
     events,
-    updatedAt: latestRun?.collected_at ?? '',
+    updatedAt,
     window: { start, end, days: Math.max(1, Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000)) },
     sourceStatus: {
       attempted: rows.length,
@@ -167,6 +172,26 @@ export async function readDailyCalendarSnapshot(database: D1Database, snapshotKe
   } catch {
     return null;
   }
+}
+
+export async function readLatestDailyCalendarSnapshot(
+  database: D1Database,
+  start?: string,
+  endExclusive?: string,
+): Promise<EventsResponse | null> {
+  const rows = await database.prepare(`SELECT payload_json FROM daily_calendar_snapshots
+    ORDER BY updated_at DESC LIMIT 25`).all<{ payload_json: string }>();
+  for (const row of rows.results) {
+    try {
+      const payload = JSON.parse(row.payload_json) as EventsResponse;
+      if (!Array.isArray(payload.events) || !payload.sourceStatus || typeof payload.updatedAt !== 'string' || !payload.window) continue;
+      if (start && endExclusive && (payload.window.end < start || payload.window.start >= endExclusive)) continue;
+      return payload;
+    } catch {
+      // Try the next newest snapshot rather than failing the entire saved calendar.
+    }
+  }
+  return null;
 }
 
 export async function writeDailyCalendarSnapshot(database: D1Database, snapshotKey: string, payload: EventsResponse) {

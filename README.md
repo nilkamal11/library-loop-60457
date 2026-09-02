@@ -1,81 +1,59 @@
 # Library Loop 60457
 
-Library Loop is a live calendar for public-library, park, recreation, nature, and family events near ZIP 60457. It focuses on activities suitable for ages 7–16 while keeping clearly teen-only events hidden by default.
+Library Loop is a rolling seven-day calendar of public library, park, recreation, nature, and family events within 15 miles of ZIP 60457. The default view is for children and families whose interests overlap ages 7–16; clearly teen-only events are opt-in.
 
 Live site: [library-loop-60457.nilkamals463352.chatgpt.site](https://library-loop-60457.nilkamals463352.chatgpt.site/)
 
-## Architecture
+The complete product, data, safety, operations, and acceptance requirements are recorded in [`REQUIREMENTS.md`](REQUIREMENTS.md).
 
-Library Loop uses two collection lanes:
+## How it works
 
-1. **Hosted structured feeds** run in Cloudflare Workers. These adapters read official JSON, RSS, ICS, Communico, LibraryCalendar, LibCal/CivicPlus, WordPress Events, and related public calendar formats.
-2. **Local overnight browser collection** uses Node.js, Playwright Core, and an installed Microsoft Edge or Chrome browser for reviewed official pages that do not expose a dependable structured feed.
+Normal page loads read one persisted calendar from Cloudflare D1. They never wait for or trigger a live fan-out to dozens of external sites.
 
-The local collector validates and signs each batch with HMAC-SHA256 before uploading it. Cloudflare D1 stores the latest accepted per-source snapshots. The public UI merges direct feeds, permitted family-event discovery, and D1 snapshots, then deduplicates events and applies the audience filters.
+Two reviewed collection lanes update that saved calendar:
 
-Unexpectedly empty, failed, blocked, equal-timestamp, or older browser results do not erase a newer last-known-good snapshot.
+1. An authenticated hosted refresh reads configured official structured feeds, applies strict youth/family evidence rules, validates HTTPS and same-origin redirects, honors robots.txt, and preserves last-known-good records when a source fails or unexpectedly returns no usable events.
+2. A local overnight Playwright collector covers configured official public pages that do not offer dependable structured feeds. It validates and signs each batch before uploading it to the production ingest endpoint.
 
-## Stack
-
-- React 19, TypeScript, Next.js App Router conventions
-- Vinext and Vite for a Cloudflare Workers-compatible build
-- Tailwind CSS 4
-- OpenAI Sites hosting with Cloudflare Workers and D1
-- Node.js 22.18 or newer and pnpm 11
-- Playwright Core with system Edge or Chrome for the local collector
+The visitor read model selects the newest saved structured snapshot that overlaps the requested dates, merges the current overnight snapshot, removes duplicates, filters the requested seven-day window, and reports partial or stale coverage honestly.
 
 ## Local development
+
+The Cloudflare-bound application must be previewed with the Sites development runtime:
 
 ```powershell
 pnpm install
 pnpm dev
 ```
 
-Validation commands:
+Run the complete validation set before publishing:
 
 ```powershell
 pnpm test:collector
+pnpm test:calendar
+pnpm exec tsc --noEmit
 pnpm lint
 pnpm build
 ```
 
-The collector defaults to a safe dry run and writes ignored audit artifacts under `collector/runs/`:
+`pnpm start` is also safe for a production-bundle smoke test. Without Cloudflare bindings it renders the explicit unavailable state instead of querying D1.
 
-```powershell
-node collector/run.mjs --dry-run --source justice-public-library --headed
-node collector/run.mjs --dry-run
-```
+## Collection safety
 
-See [`collector/RUNBOOK.md`](collector/RUNBOOK.md) for the reviewed collection and upload workflow.
+Only reviewed HTTPS sources in the configured manifests are allowed. The collectors stop on blocked robots paths, cross-origin redirects, login or access-denied pages, CAPTCHAs, challenge HTML, stale writes, or ambiguous content. Generic activity words are not enough to classify an event as appropriate for children or families.
 
-## Collector configuration
+Production refreshes and uploads require `LIBRARY_LOOP_INGEST_TOKEN`. The token is read from the runtime or current Windows user environment and must never be written to the repository, command arguments, logs, or collector artifacts.
 
-Production uploads require `LIBRARY_LOOP_INGEST_TOKEN` in the local process or the current Windows user's environment. Never add the token to a file, command argument, GitHub secret unless intentionally configuring a trusted workflow, or collector artifact.
-
-Optional variables:
-
-- `LIBRARY_LOOP_INGEST_URL` overrides the production ingest endpoint.
-- `LIBRARY_LOOP_BROWSER_PATH` selects a system browser executable.
-- `LIBRARY_LOOP_PLAYWRIGHT_PATH` selects an externally installed Playwright Core package.
-
-The upload contract allows at most 200 events per source, 3,000 events per batch, and 1,500,000 UTF-8 bytes. Only source IDs from the reviewed collector manifest are accepted.
-
-## Safety boundaries
-
-The collector checks `robots.txt`, uses public HTTPS pages, and stops at sign-in requirements, CAPTCHAs, access-denied responses, or ambiguous data. It does not reuse browser credentials, solve challenges, perform OCR, enter calendar iframes, or click through every event-detail page. Visual-only or ambiguous records stay unpublished for review.
-
-The repository contains no ingest token or browser session. Local run artifacts, environment files, Wrangler state, databases, and build outputs are ignored.
+The upload contract allows at most 200 events per source, 3,000 events per batch, and 1,500,000 UTF-8 bytes. Only source IDs from the reviewed collector manifest are accepted. Empty, failed, blocked, and stale source writes do not erase newer last-known-good events.
 
 ## Scheduling
 
-Scheduling is intentionally external to the repository. The production installation runs the reviewed upload command locally overnight. A clone of this repository does not create or modify any scheduled task.
+Scheduling is external to the repository. The primary Windows task runs the overnight upload at 2:15 AM. The separate 4:00 AM fallback checks the current-night audit and task state first, and runs only when there is no accepted upload and no collector already running.
 
-[`scripts/run-overnight-collector.ps1`](scripts/run-overnight-collector.ps1) is the noninteractive Windows entry point used by the production task. It writes ignored logs under `collector/runs/scheduled/`. The script itself does not register a task or change Windows power settings.
+[`scripts/run-overnight-collector.ps1`](scripts/run-overnight-collector.ps1) is the noninteractive task entry point. It writes ignored logs under `collector/runs/scheduled/`, keeps routine native stderr from aborting the wrapper, and performs the authenticated structured refresh only after an accepted overnight upload.
 
 ## Deployment
 
-The application is built with `pnpm build` and deployed through OpenAI Sites. `.openai/hosting.json` declares the logical D1 binding; hosted runtime secrets are managed outside Git.
-
-## License
+The site is built with `pnpm build`, packaged from that exact Git commit, and published with OpenAI Sites. [`.openai/hosting.json`](.openai/hosting.json) identifies the existing Sites project and D1 binding. Runtime secrets remain outside Git.
 
 No open-source license has been granted. All rights are reserved by the repository owner.

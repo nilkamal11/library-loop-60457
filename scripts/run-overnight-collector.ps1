@@ -12,36 +12,41 @@ $logPath = Join-Path $runLogPath "$timestamp-$Mode.log"
 
 try {
   $corepackPath = (Get-Command corepack.cmd -ErrorAction Stop).Source
-  Push-Location -LiteralPath $dashboardPath
+  $commandArguments = switch ($Mode) {
+    'upload' { @('pnpm', 'run', 'collect:overnight') }
+    'dry-run' { @('pnpm', 'run', 'collect:dry-run') }
+    'list-sources' { @('pnpm', 'exec', 'node', 'collector/run.mjs', '--list-sources') }
+  }
+  $stdoutPath = Join-Path $runLogPath "$timestamp-$Mode.stdout.tmp"
+  $stderrPath = Join-Path $runLogPath "$timestamp-$Mode.stderr.tmp"
   try {
-    # Preserve the native program's real exit code; pnpm may write ordinary progress
-    # output to stderr, which must not turn an accepted upload into a PowerShell error.
-    $previousNativeErrorPreference = $PSNativeCommandUseErrorActionPreference
-    $PSNativeCommandUseErrorActionPreference = $false
-    $arguments = switch ($Mode) {
-      'upload' { @('pnpm', 'run', 'collect:overnight') }
-      'dry-run' { @('pnpm', 'run', 'collect:dry-run') }
-      'list-sources' { @('pnpm', 'exec', 'node', 'collector/run.mjs', '--list-sources') }
-    }
-    # Use direct all-stream redirection instead of a pipeline so ordinary pnpm
-    # stderr cannot terminate the wrapper after a successful upload.
-    & $corepackPath @arguments *> $logPath
-    $collectorExitCode = $LASTEXITCODE
+    # Start-Process keeps routine native stderr separate from PowerShell's terminating-error stream.
+    $collectorProcess = Start-Process -FilePath $corepackPath -ArgumentList $commandArguments -WorkingDirectory $dashboardPath -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+    if (Test-Path -LiteralPath $stdoutPath) { Get-Content -LiteralPath $stdoutPath | Out-File -LiteralPath $logPath -Append -Encoding utf8 }
+    if (Test-Path -LiteralPath $stderrPath) { Get-Content -LiteralPath $stderrPath | Out-File -LiteralPath $logPath -Append -Encoding utf8 }
+    $collectorExitCode = $collectorProcess.ExitCode
     if ($Mode -eq 'upload' -and $collectorExitCode -eq 0) {
       $snapshotDate = (Get-Date).ToString('yyyy-MM-dd')
       $snapshotUrl = "https://library-loop-60457.nilkamals463352.chatgpt.site/api/events?start=$snapshotDate&days=7&refresh=1"
-      $snapshotResponse = Invoke-WebRequest -Uri $snapshotUrl -UseBasicParsing -TimeoutSec 180
+      $refreshToken = [Environment]::GetEnvironmentVariable('LIBRARY_LOOP_INGEST_TOKEN', 'Process')
+      if ([string]::IsNullOrWhiteSpace($refreshToken)) {
+        $refreshToken = [Environment]::GetEnvironmentVariable('LIBRARY_LOOP_INGEST_TOKEN', 'User')
+      }
+      if ([string]::IsNullOrWhiteSpace($refreshToken)) { throw 'The calendar refresh token is not configured.' }
+      $snapshotHeaders = @{ Authorization = "Bearer $refreshToken" }
+      $snapshotResponse = Invoke-WebRequest -Uri $snapshotUrl -Headers $snapshotHeaders -UseBasicParsing -TimeoutSec 180
       if ($snapshotResponse.StatusCode -lt 200 -or $snapshotResponse.StatusCode -ge 300) {
         throw "Daily calendar snapshot returned HTTP $($snapshotResponse.StatusCode)."
       }
       $snapshot = $snapshotResponse.Content | ConvertFrom-Json
+      if ($snapshot.persisted -ne $true) { throw 'Daily calendar snapshot did not confirm persistence.' }
       $eventCount = @($snapshot.events).Count
       $sourceCount = $snapshot.sourceStatus.attempted
       "Daily calendar snapshot refreshed (HTTP $($snapshotResponse.StatusCode)): $eventCount events from $sourceCount configured sources." | Out-File -LiteralPath $logPath -Append -Encoding utf8
     }
   } finally {
-    $PSNativeCommandUseErrorActionPreference = $previousNativeErrorPreference
-    Pop-Location
+    Remove-Item -LiteralPath $stdoutPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
   }
 } catch {
   $_ | Out-String | Out-File -LiteralPath $logPath -Append -Encoding utf8

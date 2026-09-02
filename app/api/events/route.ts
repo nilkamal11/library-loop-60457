@@ -1,7 +1,20 @@
 import { addDays, chicagoTodayKey, type EventsResponse, type LiveEvent, type SourceKind } from '@/lib/live-event';
-import { collectorDatabase, ensureCollectorSchema, readDailyCalendarSnapshot, writeDailyCalendarSnapshot } from '@/lib/collector-db';
+import { collectorDatabase, collectorEnv, ensureCollectorSchema, readDailyCalendarSnapshot, readLatestDailyCalendarSnapshot, writeDailyCalendarSnapshot } from '@/lib/collector-db';
 
 export const runtime = 'edge';
+
+async function equalSecret(left: string, right: string) {
+  const encoder = new TextEncoder();
+  const [leftHash, rightHash] = await Promise.all([
+    crypto.subtle.digest('SHA-256', encoder.encode(left)),
+    crypto.subtle.digest('SHA-256', encoder.encode(right)),
+  ]);
+  const leftBytes = new Uint8Array(leftHash);
+  const rightBytes = new Uint8Array(rightHash);
+  let mismatch = left.length === right.length ? 0 : 1;
+  for (let index = 0; index < leftBytes.length; index += 1) mismatch |= leftBytes[index] ^ rightBytes[index];
+  return mismatch === 0;
+}
 
 type FeedType = 'librarycalendar' | 'tribe' | 'civicplus' | 'squarespace' | 'communico' | 'rss' | 'bibliocommons' | 'mycalendar';
 
@@ -225,7 +238,7 @@ function explicitAge(text: string) {
   return null;
 }
 
-function deriveAudience(title: string, description: string, labels: string[], sourceKind: SourceKind) {
+function deriveAudience(title: string, description: string, labels: string[]) {
   const text = `${title} ${description} ${labels.join(' ')}`;
   const lower = text.toLowerCase();
   const age = explicitAge(text);
@@ -249,14 +262,12 @@ function deriveAudience(title: string, description: string, labels: string[], so
   const adultActivity = /\b(bodypump|cycle|cycling|spin|nia|foam rolling|werq|zumba|pilates|barre|yoga|cardio|aerobics|fitness class|workout|strength training|pickleball|golf league|softball league)\b/.test(lower);
   const adultProgram = /\b(adults?|lapidary|lunch\s*(?:&|and)\s*learn|independent housing|retirement|medicare|matinee|provider training|staff training|certification)\b/.test(lower);
   const notAnEvent = /\b(?:library|branch|pool|office|village hall|facility|building)\s+(?:is\s+)?closed\b|\bclosed\s+(?:on|for|august|september|october|november|december|january|february|march|april|may|june|july)|delayed opening|holiday hours/.test(lower);
-  const generalPublicActivity = /\b(concert|festival|fest|fair|market|hike|walk|nature|hummingbirds?|birds?|bones?|kayak|open mic|improv|spray pad|swim|skate|climb|ceramics|arts?|craft|story|show|garage sale|touch-a-truck|yappy|wildlife|music|bingo|movie|theat(?:er|re)|audition|health fair|dance|holiday|celebration|workshop)\b/.test(lower);
   if (administrative || notAnEvent || (adultOnly && !age) || ((adultActivity || adultProgram) && !age && !teen && !youth && !familyNamed)) return { include: false, ages: '', teenOnly: false, family: false };
   if (age) return { include: age.min <= 16 && age.max >= 7, ages: age.label, teenOnly, family };
   if (teen) return { include: true, ages: labels.find((label) => /teen|tween/i.test(label)) ?? 'Teens / tweens', teenOnly: teenOnly || (!family && !youth && /\bteens?|high school\b/.test(lower)), family };
   if (youngOnly) return { include: false, ages: '', teenOnly: false, family: false };
   if (family) return { include: true, ages: 'Family / all ages', teenOnly: false, family: true };
   if (youth) return { include: true, ages: labels.find((label) => /child|kid|youth/i.test(label)) ?? 'Kids / youth', teenOnly: false, family };
-  if (sourceKind !== 'Library' && generalPublicActivity) return { include: true, ages: 'Family / age not specified', teenOnly: false, family: true };
   return { include: false, ages: '', teenOnly: false, family: false };
 }
 
@@ -285,7 +296,7 @@ function cleanUrl(value: unknown, base: string) {
   if (!raw) return '';
   try {
     const url = new URL(raw, base);
-    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : '';
+    return url.protocol === 'https:' ? url.toString() : '';
   } catch {
     return '';
   }
@@ -376,7 +387,7 @@ function normalizeLibraryCalendar(record: UnknownRecord, feed: FeedConfig, start
   const fullDescription = plainText(`${stringValue(record.description)} ${stringValue(record.program_description)}`);
   const description = compactDescription(fullDescription);
   const labels = objectNames(record.age_group);
-  const audience = deriveAudience(title, fullDescription, labels, feed.sourceKind);
+  const audience = deriveAudience(title, fullDescription, labels);
   if (!audience.include) return null;
   const category = deriveCategory(`${title} ${fullDescription} ${objectNames(record.program_type).join(' ')}`);
   const branches = objectNames(record.branch);
@@ -423,7 +434,7 @@ function normalizeCommunico(record: UnknownRecord, feed: FeedConfig, start: stri
   const fullDescription = plainText(`${stringValue(record.sub_title)} ${stringValue(record.description)} ${stringValue(record.long_description)} ${stringValue(record.changed_reason)}`);
   const description = compactDescription(fullDescription);
   const labels = [...objectNames(record.agesArray ?? record.ages), ...objectNames(record.tagsArray ?? record.tags), ...objectNames(record.search_tagsArray ?? record.search_tags)];
-  const audience = deriveAudience(title, fullDescription, labels, feed.sourceKind);
+  const audience = deriveAudience(title, fullDescription, labels);
   if (!audience.include) return null;
   const url = cleanUrl(record.url, feed.endpoint) || feed.endpoint;
   const registrationUrl = cleanUrl(record.reg_url, url) || registrationLink(record.long_description, record.reg_url, url);
@@ -465,7 +476,7 @@ function normalizeTribe(record: UnknownRecord, feed: FeedConfig, start: string, 
   const fullDescription = plainText(rawDescription);
   const description = compactDescription(fullDescription);
   const labels = [...objectNames(record.categories), ...objectNames(record.tags)];
-  const audience = deriveAudience(title, fullDescription, labels, feed.sourceKind);
+  const audience = deriveAudience(title, fullDescription, labels);
   if (!audience.include) return null;
   const venueRecord = record.venue && !Array.isArray(record.venue) && typeof record.venue === 'object' ? record.venue as UnknownRecord : {};
   let distance = feed.distance;
@@ -569,7 +580,7 @@ function normalizeRss(item: string, feed: FeedConfig, start: string, end: string
   const dateKey = times.startLocal.slice(0, 10);
   if (!times.startLocal || dateKey < start || dateKey >= end) return null;
   const labels = xmlTexts(item, 'category');
-  const audience = deriveAudience(title, fullDescription, labels, feed.sourceKind);
+  const audience = deriveAudience(title, fullDescription, labels);
   if (!audience.include) return null;
   const url = cleanUrl(xmlText(item, 'link'), feed.endpoint) || feed.endpoint;
   const segments = rawDescription.split(/<br\s*\/?\s*>/gi).map((segment) => plainText(segment)).filter(Boolean);
@@ -610,7 +621,7 @@ function normalizeBibliocommons(item: string, feed: FeedConfig, start: string, e
   const rawDescription = unwrapXmlValue(xmlRawValue(item, 'description'));
   const fullDescription = plainText(rawDescription);
   const labels = xmlTexts(item, 'category');
-  const audience = deriveAudience(title, fullDescription, labels, feed.sourceKind);
+  const audience = deriveAudience(title, fullDescription, labels);
   if (!audience.include) return null;
   const location = xmlRawValue(item, 'bc:location');
   const virtual = xmlText(item, 'bc:is_virtual').toLowerCase() === 'true';
@@ -664,7 +675,7 @@ function normalizeMyCalendar(record: UnknownRecord, feed: FeedConfig, start: str
   const rawDescription = `${stringValue(record.event_desc)} ${stringValue(record.event_short)} ${stringValue(record.event_registration)} ${stringValue(record.event_tickets)}`;
   const fullDescription = plainText(rawDescription);
   const labels = [plainText(record.category_name), ...objectNames(record.categories)].filter(Boolean);
-  const audience = deriveAudience(title, fullDescription, labels, feed.sourceKind);
+  const audience = deriveAudience(title, fullDescription, labels);
   if (!audience.include) return null;
   const location = record.location && typeof record.location === 'object' && !Array.isArray(record.location)
     ? record.location as UnknownRecord
@@ -763,7 +774,7 @@ function normalizeIcs(record: Record<string, string>, feed: FeedConfig, start: s
   const fullDescription = plainText(rawIcsDescription);
   const description = compactDescription(fullDescription);
   const labels = stringValue(record.CATEGORIES).split(',').map((label) => plainText(label)).filter(Boolean);
-  const audience = deriveAudience(title, fullDescription, labels, feed.sourceKind);
+  const audience = deriveAudience(title, fullDescription, labels);
   if (!audience.include) return null;
   const category = deriveCategory(`${title} ${fullDescription} ${labels.join(' ')}`);
   const uid = stringValue(record.UID);
@@ -805,7 +816,7 @@ function normalizeSquarespace(record: UnknownRecord, feed: FeedConfig, start: st
   const fullDescription = plainText(record.excerpt ?? record.body);
   const description = compactDescription(fullDescription);
   const labels = [...objectNames(record.categories), ...objectNames(record.tags)];
-  const audience = deriveAudience(title, fullDescription, labels, feed.sourceKind);
+  const audience = deriveAudience(title, fullDescription, labels);
   if (!audience.include) return null;
   const location = record.location && typeof record.location === 'object' && !Array.isArray(record.location) ? record.location as UnknownRecord : {};
   const venue = plainText(location.addressTitle) || feed.name;
@@ -844,25 +855,96 @@ function normalizeSquarespace(record: UnknownRecord, feed: FeedConfig, start: st
   };
 }
 
-async function fetchWithTimeout(url: string) {
-  let referer = '';
-  try {
-    referer = `${new URL(url).origin}/`;
-  } catch {
-    // The fetch below will surface an invalid URL with the same source context.
+const FETCH_AGENT = 'LibraryLoop/1.0 (+https://library-loop-60457.nilkamals463352.chatgpt.site/)';
+const robotsCache = new Map<string, Promise<string>>();
+
+async function sameOriginFetch(url: URL, accept: string, timeout = 12000) {
+  const origin = url.origin;
+  let current = url;
+  for (let redirect = 0; redirect <= 3; redirect += 1) {
+    const response = await fetch(current.toString(), {
+      redirect: 'manual',
+      headers: { Accept: accept, 'User-Agent': FETCH_AGENT },
+      signal: AbortSignal.timeout(timeout),
+    });
+    if (response.status < 300 || response.status >= 400) return response;
+    const location = response.headers.get('location');
+    if (!location) throw new Error('Ambiguous redirect without a destination');
+    const next = new URL(location, current);
+    if (next.protocol !== 'https:' || next.origin !== origin) throw new Error('Unreviewed cross-origin redirect');
+    current = next;
   }
-  const response = await fetch(url, {
-    headers: {
-      Accept: 'application/json, text/calendar;q=0.9, application/rss+xml;q=0.8, application/xml;q=0.8, text/plain;q=0.7',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/151.0 Safari/537.36',
-      ...(referer ? { Referer: referer } : {}),
-      'Sec-Fetch-Dest': 'empty',
-      'Sec-Fetch-Mode': 'cors',
-      'Sec-Fetch-Site': 'same-origin',
-    },
-    signal: AbortSignal.timeout(12000),
-  });
+  throw new Error('Too many redirects');
+}
+
+function robotsRuleMatches(rule: string, path: string) {
+  if (!rule) return false;
+  const anchored = rule.endsWith('$');
+  const body = (anchored ? rule.slice(0, -1) : rule)
+    .split('*')
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('.*');
+  return new RegExp(`^${body}${anchored ? '$' : ''}`).test(path);
+}
+
+function robotsAllows(contents: string, path: string) {
+  const groups: Array<{ agents: string[]; rules: Array<{ allow: boolean; value: string }> }> = [];
+  let agents: string[] = [];
+  let rules: Array<{ allow: boolean; value: string }> = [];
+  const finish = () => {
+    if (agents.length) groups.push({ agents, rules });
+    agents = [];
+    rules = [];
+  };
+  for (const rawLine of contents.split(/\r?\n/)) {
+    const line = rawLine.replace(/#.*$/, '').trim();
+    if (!line) continue;
+    const separator = line.indexOf(':');
+    if (separator < 0) continue;
+    const field = line.slice(0, separator).trim().toLowerCase();
+    const value = line.slice(separator + 1).trim();
+    if (field === 'user-agent') {
+      if (rules.length) finish();
+      agents.push(value.toLowerCase());
+    } else if ((field === 'allow' || field === 'disallow') && agents.length) {
+      rules.push({ allow: field === 'allow', value });
+    }
+  }
+  finish();
+  const token = 'libraryloop';
+  const specific = groups.filter((group) => group.agents.some((agent) => agent !== '*' && token.includes(agent)));
+  const applicable = specific.length ? specific : groups.filter((group) => group.agents.includes('*'));
+  const matches = applicable.flatMap((group) => group.rules).filter((rule) => robotsRuleMatches(rule.value, path));
+  if (!matches.length) return true;
+  matches.sort((left, right) => right.value.length - left.value.length || Number(right.allow) - Number(left.allow));
+  return matches[0].allow;
+}
+
+async function allowedByRobots(url: URL) {
+  let cached = robotsCache.get(url.origin);
+  if (!cached) {
+    cached = (async () => {
+      const response = await sameOriginFetch(new URL('/robots.txt', url.origin), 'text/plain', 8000);
+      if (response.status === 404 || response.status === 410) return '';
+      if (!response.ok) throw new Error(`robots.txt returned HTTP ${response.status}`);
+      return response.text();
+    })();
+    robotsCache.set(url.origin, cached);
+  }
+  return robotsAllows(await cached, `${url.pathname}${url.search}`);
+}
+
+async function fetchWithTimeout(url: string) {
+  const target = new URL(url);
+  if (target.protocol !== 'https:') throw new Error('Only reviewed HTTPS feeds are allowed');
+  if (!(await allowedByRobots(target))) throw new Error('Blocked by robots.txt');
+  const response = await sameOriginFetch(
+    target,
+    'application/json, text/calendar;q=0.9, application/rss+xml;q=0.8, application/xml;q=0.8, text/plain;q=0.7',
+  );
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+  if (contentType.includes('text/html')) throw new Error('Ambiguous HTML, login, or challenge response');
   return response;
 }
 
@@ -1014,25 +1096,64 @@ export async function GET(request: Request) {
   const days = Math.min(7, Math.max(1, Number.parseInt(query.get('days') ?? '7', 10) || 7));
   const end = addDays(start, days);
   const snapshotKey = `${start}|${days}`;
+  const refresh = query.get('refresh') === '1';
+  if (refresh) {
+    const secret = (await collectorEnv()).LIBRARY_LOOP_INGEST_TOKEN;
+    if (!secret) return Response.json({ error: 'Calendar refresh authentication is not configured' }, { status: 503 });
+    const authorization = request.headers.get('authorization') ?? '';
+    const supplied = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+    if (!supplied || !(await equalSecret(supplied, secret))) {
+      return Response.json({ error: 'Calendar refresh is not authorized' }, { status: 401 });
+    }
+  }
   let database: D1Database | null = null;
   try {
-    database = collectorDatabase();
+    database = await collectorDatabase();
     await ensureCollectorSchema(database);
-    if (query.get('refresh') !== '1') {
-      const saved = await readDailyCalendarSnapshot(database, snapshotKey);
+    if (!refresh) {
+      const saved = await readDailyCalendarSnapshot(database, snapshotKey) ?? await readLatestDailyCalendarSnapshot(database, start, end);
       if (saved) return Response.json(saved, { headers: { 'Cache-Control': 'public, max-age=300' } });
+      return Response.json({ error: 'No saved structured calendar is available' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
     }
   } catch {
     database = null;
   }
+  if (!database) return Response.json({ error: 'Saved calendar storage is unavailable' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+  const previous = await readDailyCalendarSnapshot(database, snapshotKey)
+    ?? await readLatestDailyCalendarSnapshot(database, start, end);
   const results = await settledPool(feeds, 5, async (feed) => ({ feed, events: await fetchFeed(feed, start, end) }));
   const successful = results.filter((result): result is PromiseFulfilledResult<{ feed: FeedConfig; events: LiveEvent[] }> => result.status === 'fulfilled');
   const failedSources = results.flatMap((result, index) => result.status === 'rejected' ? [feeds[index].name] : []);
+  const retainedSources: string[] = [];
   const deduped = new Map<string, LiveEvent>();
-  for (const { events } of successful.map((result) => result.value)) {
-    for (const event of events) {
-      const key = `${event.title.toLowerCase()}|${event.startLocal}|${event.source.toLowerCase()}`;
+  for (const [index, result] of results.entries()) {
+    const feed = feeds[index];
+    const currentEvents = result.status === 'fulfilled' ? result.value.events : [];
+    const shouldRetain = result.status === 'rejected' || currentEvents.length === 0;
+    const retainedEvents = shouldRetain
+      ? (previous?.events ?? []).filter((event) => event.source === feed.name && event.dateKey >= start && event.dateKey < end)
+      : [];
+    if (retainedEvents.length) retainedSources.push(feed.name);
+    for (const event of currentEvents.length ? currentEvents : retainedEvents) {
+      const retained = retainedEvents.includes(event);
+      let canonicalUrl = '';
+      try {
+        const parsed = new URL(event.url || event.registrationUrl);
+        parsed.hash = '';
+        for (const key of [...parsed.searchParams.keys()]) {
+          if (/^(?:utm_.+|fbclid|gclid|mc_cid|mc_eid)$/i.test(key)) parsed.searchParams.delete(key);
+        }
+        canonicalUrl = parsed.toString();
+      } catch {
+        canonicalUrl = '';
+      }
+      const key = [event.source, event.title, event.startLocal, event.venue, canonicalUrl]
+        .map((value) => value.trim().toLowerCase()).join('|');
       if (!deduped.has(key)) deduped.set(key, event);
+      if (retained) deduped.set(key, {
+        ...event,
+        scheduleNotice: event.scheduleNotice || 'Saved from the last successful source refresh — confirm details with the organizer.',
+      });
     }
   }
   const events = [...deduped.values()].sort((a, b) => a.startLocal.localeCompare(b.startLocal) || a.distance - b.distance);
@@ -1046,10 +1167,17 @@ export async function GET(request: Request) {
       empty: successful.filter((result) => result.value.events.length === 0).length,
       failed: failedSources.length,
       failedSources,
+      retained: retainedSources.length,
+      retainedSources,
     },
   };
-  if (database) {
-    try { await writeDailyCalendarSnapshot(database, snapshotKey, payload); } catch { /* return the usable live result */ }
+  try {
+    await writeDailyCalendarSnapshot(database, snapshotKey, payload);
+    const confirmed = await readDailyCalendarSnapshot(database, snapshotKey);
+    if (!confirmed || confirmed.updatedAt !== payload.updatedAt) throw new Error('Snapshot read-back did not match');
+  } catch (error) {
+    console.error('Structured calendar snapshot write failed', error);
+    return Response.json({ error: 'Structured calendar was collected but could not be saved' }, { status: 500, headers: { 'Cache-Control': 'no-store' } });
   }
-  return Response.json(payload, { headers: { 'Cache-Control': 'public, max-age=300' } });
+  return Response.json({ ...payload, persisted: true }, { headers: { 'Cache-Control': 'no-store' } });
 }
