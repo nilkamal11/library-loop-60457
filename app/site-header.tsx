@@ -1,4 +1,4 @@
-import Link from 'next/link';
+/* eslint-disable @next/next/no-html-link-for-pages -- Native links avoid a vinext hosted-navigation runtime failure. */
 
 type SiteHeaderProps = {
   active: 'events' | 'sources';
@@ -10,12 +10,12 @@ export default function SiteHeader({ active, radius }: SiteHeaderProps) {
     <>
       <a className="skip-link" href="#main-content">Skip to content</a>
       <header className="site-header">
-        <Link className="brand" href="/" aria-label="Library Loop home" prefetch={false}>
+        <a className="brand" href="/" aria-label="Library Loop home">
           <span aria-hidden="true">LL</span><strong>Library Loop</strong>
-        </Link>
+        </a>
         <nav className="primary-nav" aria-label="Primary">
-          <Link className={`nav-link ${active === 'events' ? 'active' : ''}`} href="/" prefetch={false} aria-current={active === 'events' ? 'page' : undefined}>Events</Link>
-          <Link className={`nav-link ${active === 'sources' ? 'active' : ''}`} href="/sources" prefetch={false} aria-current={active === 'sources' ? 'page' : undefined}>Sources &amp; tech</Link>
+          <a className={`nav-link ${active === 'events' ? 'active' : ''}`} href="/" aria-current={active === 'events' ? 'page' : undefined}>Events</a>
+          <a className={`nav-link ${active === 'sources' ? 'active' : ''}`} href="/sources" aria-current={active === 'sources' ? 'page' : undefined}>Sources &amp; tech</a>
         </nav>
         <div className="location"><span aria-hidden="true">●</span><span className="location-label"><span className="location-near">Near </span>60457</span>{radius ? <b>within {radius} miles</b> : null}</div>
       </header>
