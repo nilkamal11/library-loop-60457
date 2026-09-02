@@ -69,7 +69,3 @@ Secret values, production credentials, and internal deployment identifiers are d
 - Node.js 22.18 or newer, pnpm 11.19.0, JavaScript ES modules, and Playwright Core 1.62.1.
 - Windows Task Scheduler and PowerShell for the local overnight entry point.
 - Node test runner, ESLint 9.39.4, and GitHub Actions for validation.
-
-## Python
-
-There are no Python files in the current project. The collector is implemented in Node.js/JavaScript, and the scheduled Windows entry point is PowerShell. Both are included in this repository.

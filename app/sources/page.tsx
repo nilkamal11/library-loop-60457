@@ -242,7 +242,6 @@ export default function SourcesPage() {
 
         <section id="code" className="reference-section code-panel" aria-labelledby="code-title">
           <div><p className="kicker">Source code</p><h2 id="code-title">Project repository on GitHub</h2><p>The owner-controlled repository includes the application, collectors, source manifests, tests, database migrations, documentation, and PowerShell scheduled-task entry point. Access follows the repository’s permissions.</p><div className="code-actions"><a className="official-link" href="https://github.com/nilkamal11/library-loop-60457" target="_blank" rel="noopener noreferrer">Open the GitHub repository <span aria-hidden="true">↗</span></a><a href="https://github.com/nilkamal11/library-loop-60457/blob/main/docs/SOURCES_AND_TECH.md" target="_blank" rel="noopener noreferrer">Read the technical reference</a></div></div>
-          <aside><strong>Python status</strong><p>No Python is used in the current project, so there is no Python file to share. The collector is Node.js/JavaScript with Playwright; Windows scheduling uses PowerShell. Both are included on GitHub.</p></aside>
         </section>
 
         <a className="back-to-events" href="/">← Back to events</a>
