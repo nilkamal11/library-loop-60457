@@ -14,7 +14,7 @@
     "collect:dry-run": "node collector/run.mjs --dry-run",
     "collect:overnight": "node collector/run.mjs --upload",
     "test:collector": "node --test collector/tests/*.test.mjs",
-    "test:calendar": "node --experimental-strip-types --test lib/calendar-read-model.test.ts"
+    "test:calendar": "node --experimental-strip-types --test lib/calendar-read-model.test.ts lib/source-catalog.test.ts"
   },
   "dependencies": {
     "next": "16.2.6",

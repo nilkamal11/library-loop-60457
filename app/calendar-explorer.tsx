@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { formatDuration, formatEventDateTime, formatEventTime, makeDateStrip, type LiveEvent } from '@/lib/live-event';
 import type { CalendarPayload } from '@/lib/calendar-read-model';
+import SiteHeader from '@/app/site-header';
 
 const PAGE_SIZE = 24;
 
@@ -132,12 +134,9 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
           : 'Calendar unavailable';
 
   return (
-    <main>
-      <header className="site-header">
-        <div className="brand" aria-label="Library Loop"><span aria-hidden="true">LL</span><strong>Library Loop</strong></div>
-        <div className="location"><span aria-hidden="true">●</span> Near 60457 <b>within {radius} miles</b></div>
-      </header>
-
+    <>
+      <SiteHeader active="events" radius={radius} />
+      <main id="main-content">
       <section className="intro" aria-labelledby="page-title">
         <div>
           <p className="kicker">Things to do in the next seven days</p>
@@ -168,7 +167,7 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
       </nav>
 
       <section className="results" aria-labelledby="results-title">
-        <div className="results-heading"><div><p className="kicker">Saved official listings</p><h2 id="results-title">{date === 'all' ? `${formatShortDate(data.requestedWindow.start)}–${formatShortDate(data.requestedWindow.end)}` : formatShortDate(date)}</h2></div><span>Showing {Math.min(limit, filteredEvents.length)} of {filteredEvents.length}</span></div>
+        <div className="results-heading"><div><p className="kicker">Saved event listings</p><h2 id="results-title">{date === 'all' ? `${formatShortDate(data.requestedWindow.start)}–${formatShortDate(data.requestedWindow.end)}` : formatShortDate(date)}</h2></div><span>Showing {Math.min(limit, filteredEvents.length)} of {filteredEvents.length}</span></div>
         {filteredEvents.length ? <div className="event-grid">
           {filteredEvents.slice(0, limit).map((event) => {
             const time = formatEventTime(event);
@@ -186,13 +185,12 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
         </div> : <div className="empty-state"><strong>No events match these filters.</strong><p>Try all dates, a wider distance, or clear the search.</p><button type="button" onClick={clearFilters}>Clear filters</button></div>}
         {limit < filteredEvents.length && <button className="more-button" type="button" onClick={() => setLimit((value) => value + PAGE_SIZE)}>Show {Math.min(PAGE_SIZE, filteredEvents.length - limit)} more events</button>}
       </section>
-
-      <footer><strong>Library Loop</strong><span>Updated daily from saved public calendar listings. Organizers control availability and last-minute changes.</span></footer>
-
+      </main>
+      <footer><strong>Library Loop</strong><span>Updated daily from saved public calendar listings. Organizers control availability and last-minute changes.</span><Link href="/sources">Sources &amp; technology</Link></footer>
       {selected && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDialog(); }}>
         <section ref={dialogRef} className="event-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
           <button ref={closeRef} className="dialog-close" type="button" onClick={closeDialog} aria-label="Close event details">×</button>
-          <p className="kicker">{selected.sourceKind} · official listing</p>
+          <p className="kicker">{selected.sourceKind} · {selected.sourceKind === 'Family guide' ? 'discovery listing' : 'official organizer listing'}</p>
           <h2 id="dialog-title">{selected.title}</h2>
           <div className="dialog-tags"><span>{selected.ages}</span><span>{selected.category}</span><span>{formatDuration(selected)}</span></div>
           {selected.scheduleNotice && <div className="dialog-warning">{selected.scheduleNotice}</div>}
@@ -208,6 +206,6 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
           <small className="disclaimer">Confirm availability and last-minute changes with the organizer.</small>
         </section>
       </div>}
-    </main>
+    </>
   );
 }

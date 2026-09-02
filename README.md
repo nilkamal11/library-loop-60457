@@ -4,6 +4,8 @@ Library Loop is a rolling seven-day calendar of public library, park, recreation
 
 Live site: [library-loop-60457.nilkamals463352.chatgpt.site](https://library-loop-60457.nilkamals463352.chatgpt.site/)
 
+Sources and technology: [public source directory](https://library-loop-60457.nilkamals463352.chatgpt.site/sources) · [`docs/SOURCES_AND_TECH.md`](docs/SOURCES_AND_TECH.md)
+
 The complete product, data, safety, operations, and acceptance requirements are recorded in [`REQUIREMENTS.md`](REQUIREMENTS.md).
 
 ## How it works
