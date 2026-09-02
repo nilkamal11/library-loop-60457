@@ -79,3 +79,16 @@ test('marks an old overnight-only snapshot as stale', () => {
   const merged = mergeCalendarSnapshots(null, overnight, '2026-09-02', 7, new Date('2026-09-02T12:00:00.000Z'));
   assert.equal(merged.health, 'stale');
 });
+
+test('withholds legacy events whose audience was guessed rather than evidenced', () => {
+  const guessed = { ...event('guessed', '2026-09-04'), ages: 'Family / age not specified', family: true };
+  const explicit = { ...event('explicit', '2026-09-04'), ages: 'Family / all ages', family: true };
+  const merged = mergeCalendarSnapshots(
+    response([guessed, explicit], '2026-09-02', '2026-09-08', 80),
+    response([], '2026-09-02', '2026-09-08', 17),
+    '2026-09-02',
+    7,
+    new Date('2026-09-02T12:00:00.000Z'),
+  );
+  assert.deepEqual(merged.events.map((item) => item.id), ['explicit']);
+});

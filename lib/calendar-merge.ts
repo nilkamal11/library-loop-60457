@@ -47,6 +47,23 @@ function withinWindow(event: LiveEvent, start: string, endExclusive: string) {
   return event.dateKey >= start && event.dateKey < endExclusive;
 }
 
+function hasTrustedAudience(event: LiveEvent) {
+  const audience = normalized(event.ages);
+  if (!audience || audience.includes('age not specified') || audience.includes('unknown')) return false;
+  const range = audience.match(/ages?\s*(\d{1,2})\s*[-–—]\s*(\d{1,2})/);
+  if (range) return Number(range[1]) <= 16 && Number(range[2]) >= 7;
+  const plus = audience.match(/ages?\s*(\d{1,2})\s*\+/);
+  if (plus) return Number(plus[1]) <= 16;
+  const exact = audience.match(/^age\s*(\d{1,2})$/);
+  if (exact) return Number(exact[1]) >= 7 && Number(exact[1]) <= 16;
+  const grades = audience.match(/grades?\s*([k\d]{1,2})\s*[-–—]\s*([k\d]{1,2})/);
+  if (grades) {
+    const grade = (value: string) => value === 'k' ? 0 : Number(value);
+    return grade(grades[1]) + 5 <= 16 && grade(grades[2]) + 6 >= 7;
+  }
+  return /family|all ages|children|childrens|kids?|youth|tweens?|teens?|middle school|high school/.test(audience);
+}
+
 export function mergeCalendarSnapshots(
   daily: EventsResponse | null,
   overnight: EventsResponse,
@@ -58,7 +75,7 @@ export function mergeCalendarSnapshots(
   const requestedEnd = addDays(endExclusive, -1);
   const deduped = new Map<string, LiveEvent>();
   for (const event of [...(daily?.events ?? []), ...overnight.events]) {
-    if (!withinWindow(event, start, endExclusive)) continue;
+    if (!withinWindow(event, start, endExclusive) || !hasTrustedAudience(event)) continue;
     const key = eventKey(event);
     if (!deduped.has(key)) deduped.set(key, event);
   }
