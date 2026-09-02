@@ -4,14 +4,15 @@ import { DatabaseSync } from 'node:sqlite';
 import {
   BULK_DELETE_SUCCESS_EVENTS_SQL,
   BULK_INSERT_SUCCESS_EVENTS_SQL,
+  BULK_UPSERT_SOURCE_COVERAGE_SQL,
   BULK_UPSERT_SOURCES_SQL,
   FINALIZE_SOURCE_ERRORS_SQL,
   INSERT_COLLECTOR_RUN_SQL,
   INSERT_RUN_SOURCE_RECEIPTS_SQL,
 } from '../../lib/collector-sql.mjs';
 
-const WRITE_STATEMENT_COUNT = 6;
-const SCHEMA_STATEMENT_COUNT = 5;
+const WRITE_STATEMENT_COUNT = 7;
+const SCHEMA_STATEMENT_COUNT = 13;
 const OTHER_INGEST_STATEMENT_COUNT = 2; // Duplicate-run lookup and receipt read.
 
 function database() {
@@ -34,6 +35,11 @@ function database() {
     last_success_at TEXT,
     error TEXT,
     consecutive_failures INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE collector_source_coverage (
+    source_id TEXT PRIMARY KEY,
+    complete INTEGER NOT NULL DEFAULT 0,
+    collected_at TEXT NOT NULL
   );
   CREATE TABLE collector_run_sources (
     run_id TEXT NOT NULL,
@@ -59,11 +65,12 @@ function event(id, dateKey = '2026-09-01', title = 'Family event') {
   return { id, title, dateKey, startLocal: `${dateKey}T10:00:00` };
 }
 
-function sourceRecord({ sourceId, sourceName, status, collectedAt, runId, events = [], error = null }) {
+function sourceRecord({ sourceId, sourceName, status, collectedAt, runId, events = [], error = null, complete = true }) {
   return {
     sourceId,
     sourceName,
     status,
+    complete,
     eventCount: status === 'success' ? events.length : 0,
     collectedAt,
     lastSuccessAt: status === 'success' ? collectedAt : null,
@@ -79,6 +86,7 @@ function batchStatements(db, { runId, collectedAt, results }) {
   const sourcesJson = JSON.stringify(sources);
   return [
     () => db.prepare(BULK_UPSERT_SOURCES_SQL).run(sourcesJson),
+    () => db.prepare(BULK_UPSERT_SOURCE_COVERAGE_SQL).run(sourcesJson),
     () => db.prepare(BULK_DELETE_SUCCESS_EVENTS_SQL).run(sourcesJson),
     () => db.prepare(BULK_INSERT_SUCCESS_EVENTS_SQL).run(sourcesJson),
     () => db.prepare(INSERT_RUN_SOURCE_RECEIPTS_SQL).run(runId, sourcesJson),
@@ -141,6 +149,31 @@ test('older and equal-timestamp results cannot replace a newer source snapshot',
   assert.deepEqual(storedEvents.map((row) => row.event_id), ['event-new']);
 });
 
+test('an incomplete successful page read updates known events without erasing later last-known-good events', () => {
+  const db = database();
+  const source = { sourceId: 'justice-public-library', sourceName: 'Justice Public Library District' };
+  applyBatch(db, {
+    runId: 'run-complete',
+    collectedAt: '2026-08-30T01:00:00.000Z',
+    results: [{ ...source, status: 'success', complete: true, events: [
+      event('event-soon', '2026-09-02', 'Original title'),
+      event('event-later', '2026-10-20'),
+    ] }],
+  });
+  applyBatch(db, {
+    runId: 'run-partial',
+    collectedAt: '2026-08-31T01:00:00.000Z',
+    results: [{ ...source, status: 'success', complete: false, events: [
+      event('event-soon', '2026-09-02', 'Updated title'),
+    ] }],
+  });
+
+  const stored = db.prepare('SELECT event_id, event_json FROM collector_events ORDER BY event_id').all();
+  assert.deepEqual(stored.map((row) => row.event_id), ['event-later', 'event-soon']);
+  assert.equal(JSON.parse(stored.find((row) => row.event_id === 'event-soon').event_json).title, 'Updated title');
+  assert.equal(db.prepare('SELECT complete FROM collector_source_coverage').get().complete, 0);
+});
+
 test('mixed sources produce exact durable receipts and keep event JSON intact', () => {
   const db = database();
   const collectedAt = '2026-08-30T04:00:00.000Z';
@@ -169,6 +202,9 @@ test('mixed sources produce exact durable receipts and keep event JSON intact', 
 
 test('a failure in any write statement rolls back the entire run', () => {
   const db = database();
+  db.exec(`CREATE TRIGGER reject_for_test BEFORE INSERT ON collector_events
+    WHEN NEW.event_id = 'force-failure'
+    BEGIN SELECT RAISE(ABORT, 'forced event write failure'); END;`);
   const input = {
     runId: 'run-rollback',
     collectedAt: '2026-08-30T05:00:00.000Z',
@@ -176,10 +212,10 @@ test('a failure in any write statement rolls back the entire run', () => {
       sourceId: 'source-a',
       sourceName: 'Source A',
       status: 'success',
-      events: [event('duplicate'), event('duplicate')],
+      events: [event('normal'), event('force-failure')],
     }],
   };
-  assert.throws(() => applyBatch(db, input), /UNIQUE constraint failed/);
+  assert.throws(() => applyBatch(db, input), /forced event write failure/);
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM collector_sources').get().count, 0);
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM collector_events').get().count, 0);
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM collector_runs').get().count, 0);
@@ -196,7 +232,7 @@ test('maximum batch still uses a fixed statement count below the free D1 limit',
   assert.equal(results.reduce((sum, result) => sum + result.events.length, 0), 3000);
   const input = { runId: 'run-max', collectedAt: '2026-08-30T06:00:00.000Z', results };
   assert.equal(batchStatements(db, input).length, WRITE_STATEMENT_COUNT);
-  assert.equal(SCHEMA_STATEMENT_COUNT + OTHER_INGEST_STATEMENT_COUNT + WRITE_STATEMENT_COUNT, 13);
+  assert.equal(SCHEMA_STATEMENT_COUNT + OTHER_INGEST_STATEMENT_COUNT + WRITE_STATEMENT_COUNT, 22);
   assert.ok(SCHEMA_STATEMENT_COUNT + OTHER_INGEST_STATEMENT_COUNT + WRITE_STATEMENT_COUNT < 50);
   assert.equal(applyBatch(db, input).reduce((sum, row) => sum + row.event_count, 0), 3000);
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM collector_events').get().count, 3000);

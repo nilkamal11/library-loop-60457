@@ -149,7 +149,7 @@ async function collectOne(session, source, window, options) {
   if (!source.enabled) {
     const reason = 'No verified browser source URL is configured';
     return {
-      sourceResult: { sourceId: source.id, sourceName: source.name, status: 'blocked', error: reason, events: [] },
+      sourceResult: { sourceId: source.id, sourceName: source.name, status: 'blocked', complete: false, error: reason, events: [] },
       audit: { sourceId: source.id, sourceName: source.name, startedAt, completedAt: new Date().toISOString(), durationMs: Date.now() - startedMs, outcome: 'blocked', reason, accepted: 0, review: [], excludedCount: 0 },
     };
   }
@@ -158,7 +158,7 @@ async function collectOne(session, source, window, options) {
     const pageResult = await collectSourcePage(session, source, options);
     if (pageResult.outcome === 'blocked') {
       return {
-        sourceResult: { sourceId: source.id, sourceName: source.name, status: 'blocked', error: pageResult.error, events: [] },
+        sourceResult: { sourceId: source.id, sourceName: source.name, status: 'blocked', complete: false, error: pageResult.error, events: [] },
         audit: { ...pageResult.audit, sourceName: source.name, startedAt, completedAt: new Date().toISOString(), durationMs: Date.now() - startedMs, outcome: 'blocked', reason: pageResult.error, accepted: 0, review: [], excludedCount: 0 },
       };
     }
@@ -173,6 +173,9 @@ async function collectOne(session, source, window, options) {
         sourceId: source.id,
         sourceName: source.name,
         status,
+        // The generic browser pass reads one public page. It cannot prove that
+        // a paged, framed, or month-based calendar exposed its full window.
+        complete: false,
         ...(status === 'empty' ? { error: emptyReason } : {}),
         events: normalized.events,
       },
@@ -195,7 +198,7 @@ async function collectOne(session, source, window, options) {
   } catch (error) {
     const message = safeError(error);
     return {
-      sourceResult: { sourceId: source.id, sourceName: source.name, status: 'failed', error: message, events: [] },
+      sourceResult: { sourceId: source.id, sourceName: source.name, status: 'failed', complete: false, error: message, events: [] },
       audit: { sourceId: source.id, sourceName: source.name, startedAt, completedAt: new Date().toISOString(), durationMs: Date.now() - startedMs, outcome: 'failed', reason: message, accepted: 0, review: [], excludedCount: 0 },
     };
   }

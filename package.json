@@ -12,9 +12,10 @@
     "start": "vinext start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .work",
     "collect:dry-run": "node collector/run.mjs --dry-run",
-    "collect:overnight": "node collector/run.mjs --upload",
+    "collect:browser": "node collector/run.mjs --upload",
+    "collect:overnight": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/run-overnight-collector.ps1 -Mode upload",
     "test:collector": "node --test collector/tests/*.test.mjs",
-    "test:calendar": "node --experimental-strip-types --test lib/calendar-read-model.test.ts lib/source-catalog.test.ts"
+    "test:calendar": "node --experimental-strip-types --test lib/calendar-config.test.ts lib/calendar-read-model.test.ts lib/source-catalog.test.ts"
   },
   "dependencies": {
     "next": "16.2.6",

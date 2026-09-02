@@ -1,4 +1,5 @@
 import type { EventsResponse, LiveEvent } from './live-event';
+import { CALENDAR_STALE_HOURS } from './calendar-config.ts';
 
 export type CalendarHealth = 'current' | 'partial' | 'stale' | 'overnight-only' | 'unavailable';
 
@@ -7,6 +8,12 @@ export type CalendarPayload = EventsResponse & {
   message: string;
   requestedWindow: { start: string; end: string; days: number };
   structuredSnapshot: null | { start: string; end: string; updatedAt: string };
+  futureCoverage: {
+    latestEventDate: string;
+    activeDates: number;
+    eventsAfter30Days: number;
+    sourcesAfter30Days: number;
+  };
 };
 
 function addDays(dateKey: string, amount: number) {
@@ -82,6 +89,14 @@ export function mergeCalendarSnapshots(
 
   const events = [...deduped.values()].sort((a, b) =>
     a.startLocal.localeCompare(b.startLocal) || a.distance - b.distance || a.title.localeCompare(b.title));
+  const futureStart = addDays(start, 30);
+  const eventsAfter30Days = events.filter((event) => event.dateKey >= futureStart);
+  const futureCoverage = {
+    latestEventDate: events.reduce((latest, event) => event.dateKey > latest ? event.dateKey : latest, ''),
+    activeDates: unique(events.map((event) => event.dateKey)).length,
+    eventsAfter30Days: eventsAfter30Days.length,
+    sourcesAfter30Days: unique(eventsAfter30Days.map((event) => event.source)).length,
+  };
 
   const dailyStatus = daily?.sourceStatus;
   const sourceStatus = {
@@ -102,19 +117,19 @@ export function mergeCalendarSnapshots(
     const snapshotAgeHours = ageHours(daily.updatedAt);
     const coversRequest = daily.window.start <= start && daily.window.end >= requestedEnd;
     const hasSourceProblems = sourceStatus.failed > 0 || sourceStatus.retained > 0;
-    if (snapshotAgeHours > 36 || (overnight.sourceStatus.attempted > 0 && overnightAgeHours > 36)) {
+    if (snapshotAgeHours > CALENDAR_STALE_HOURS || (overnight.sourceStatus.attempted > 0 && overnightAgeHours > CALENDAR_STALE_HOURS)) {
       health = 'stale';
       message = 'Showing the newest last-known-good calendar while one of the saved data lanes catches up.';
     } else if (!coversRequest || hasSourceProblems) {
       health = 'partial';
       message = !coversRequest
-        ? `Structured coverage currently runs through ${daily.window.end}; overnight events are merged for the remaining dates.`
+        ? `The structured collection window currently runs through ${daily.window.end}; overnight events are merged for the remaining dates.`
         : `${sourceStatus.connected}/${sourceStatus.attempted} sources responded; last-known-good events are retained where needed.`;
     } else {
       health = 'current';
       message = 'Updated daily from saved official calendar data.';
     }
-  } else if (overnightAgeHours > 36) {
+  } else if (overnightAgeHours > CALENDAR_STALE_HOURS) {
     health = 'stale';
     message = 'Only an older last-known-good overnight calendar is available.';
   }
@@ -129,6 +144,7 @@ export function mergeCalendarSnapshots(
     structuredSnapshot: daily
       ? { start: daily.window.start, end: daily.window.end, updatedAt: daily.updatedAt }
       : null,
+    futureCoverage,
     sourceStatus,
     health,
     message,
@@ -143,6 +159,7 @@ export function unavailableCalendar(start: string, days: number): CalendarPayloa
     window: { start, end, days },
     requestedWindow: { start, end, days },
     structuredSnapshot: null,
+    futureCoverage: { latestEventDate: '', activeDates: 0, eventsAfter30Days: 0, sourcesAfter30Days: 0 },
     sourceStatus: { attempted: 0, connected: 0, empty: 0, failed: 0, failedSources: [], retained: 0, retainedSources: [] },
     health: 'unavailable',
     message: 'The saved calendar could not be loaded. Please retry in a moment.',

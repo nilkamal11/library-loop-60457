@@ -82,6 +82,7 @@ The raw JSON body is exactly:
       sourceId,
       sourceName,
       status: "success" | "empty" | "failed" | "blocked",
+      complete: boolean,
       error?,
       events: LiveEvent[]
     }
@@ -89,7 +90,7 @@ The raw JSON body is exactly:
 }
 ```
 
-Each event uses the dashboard’s `LiveEvent` shape and must explicitly contain a boolean `teenOnly` field. Each source is capped at 200 events, a batch at 3,000 events, and the signed UTF-8 body at 1,500,000 bytes.
+Each event uses the dashboard’s `LiveEvent` shape and must explicitly contain a boolean `teenOnly` field. `complete` is true only when an adapter proves it covered the whole requested window; incomplete successful reads merge into the saved source instead of deleting later last-known-good events. Each source is capped at 200 events, a batch at 3,000 events, and the signed UTF-8 body at 1,500,000 bytes.
 
 The uploader sends:
 
@@ -100,11 +101,13 @@ The secret is read from the current process environment. On Windows, if it is no
 
 Prefer setting the token through the Windows **User environment variables** interface, then restart the desktop app or scheduled process so it inherits the value. A temporary PowerShell session can set `$env:LIBRARY_LOOP_INGEST_TOKEN`, but do not paste the value into a shared transcript or script.
 
-After reviewed dry runs, upload a new collection directly:
+Run the complete overnight workflow, including the independent 60-day structured refresh:
 
 ```powershell
-node collector/run.mjs --upload
+pnpm collect:overnight
 ```
+
+For a deliberate browser-lane-only upload, use `pnpm collect:browser`.
 
 Or upload an already reviewed batch:
 

@@ -13,7 +13,7 @@ The structured lane currently contains 53 libraries, 15 park districts, 10 recre
 ## Public calendar parameters
 
 - Home area: ZIP 60457; reference center 41.7244, -87.8273.
-- Visitor window: 7 days; the saved API accepts 1–7 days.
+- Visitor window: 60 days; the saved API accepts 1–60 days. The interface offers 7-, 30-, and 60-day views plus month and exact-date selectors.
 - Distance filters: 5, 10, and 15 miles; uploaded events validate at 15.5 miles or less.
 - Time zone: America/Chicago.
 - Default audience: events with explicit age/family evidence overlapping ages 7–16; clearly teen-only events are opt-in.
@@ -24,6 +24,8 @@ The structured lane currently contains 53 libraries, 15 park districts, 10 recre
 ## Structured collection parameters
 
 - 80 reviewed official feeds, collected 5 at a time.
+- 60-day collection horizon. Window-aware WordPress and BiblioCommons adapters paginate until they cover the requested range or fail safely at a reviewed cap.
+- The 60 days are the collection target, not a promise that every organizer has published that far ahead. The public page reports the latest dates actually saved.
 - 12-second request timeout and 8-second robots.txt timeout.
 - HTTPS only, same-origin redirects only, at most 3 redirects.
 - Supported adapters: LibraryCalendar JSON, WordPress Events REST, ICS, Communico JSON, RSS/BiblioCommons, My Calendar REST, and Squarespace JSON.
@@ -46,7 +48,8 @@ The structured lane currently contains 53 libraries, 15 park districts, 10 recre
 - Exact reviewed source allowlist and idempotent run IDs.
 - Maximum 200 events per source, 3,000 events per batch, and 1,500,000 UTF-8 bytes per upload.
 - Overnight descriptions are capped at 420 characters.
-- D1 writes are atomic. Empty, failed, blocked, or stale source results preserve newer last-known-good events.
+- D1 writes are atomic. Structured events are stored as indexed rows, with the three newest runs plus the newest widest-window run retained for fallback instead of storing an entire 60-day calendar in one database row.
+- Empty, failed, blocked, or stale source results preserve newer last-known-good events. Successful browser reads that cannot prove complete-window coverage merge into the prior source snapshot rather than deleting later events.
 - The collectors honor robots.txt and stop at login, password fields, CAPTCHA, anti-bot challenges, 401/403, access-denied pages, cross-origin redirects, stale material, and ambiguous content.
 - Browser page scans consider up to 240 semantic event nodes and emit at most 151 DOM candidates per page, including the source-specific dated-list fallback.
 - Event field bounds are 240 characters for title, 180 for source, 240 for venue, 360 for address, 1,200 for HTTPS URLs, and 180 for schedule notices. Source error text is capped at 500 characters.

@@ -14,8 +14,9 @@ function event(id: string, dateKey: string, source = 'Structured source'): LiveE
 }
 
 function response(events: LiveEvent[], start: string, end: string, attempted: number): EventsResponse {
+  const days = Math.round((Date.parse(`${end}T12:00:00Z`) - Date.parse(`${start}T12:00:00Z`)) / 86_400_000) + 1;
   return {
-    events, updatedAt: '2026-09-01T12:00:00.000Z', window: { start, end, days: 7 },
+    events, updatedAt: '2026-09-01T12:00:00.000Z', window: { start, end, days },
     sourceStatus: { attempted, connected: attempted, empty: 0, failed: 0, failedSources: [] },
   };
 }
@@ -34,6 +35,29 @@ test('filters saved records to the requested rolling window', () => {
   const overnight = response([], '2026-09-02', '2026-09-09', 17);
   const merged = mergeCalendarSnapshots(daily, overnight, '2026-09-02', 7, new Date('2026-09-02T12:00:00.000Z'));
   assert.deepEqual(merged.events.map((item) => item.id), ['inside']);
+});
+
+test('serves day 0 through day 59 and reports useful month-ahead coverage', () => {
+  const daily = response([
+    event('today', '2026-09-02', 'Today source'),
+    event('day-30', '2026-10-02', 'Month-ahead source'),
+    event('day-59', '2026-10-31', 'Far source'),
+    event('day-60', '2026-11-01', 'Outside source'),
+  ], '2026-09-02', '2026-10-31', 80);
+  const merged = mergeCalendarSnapshots(
+    daily,
+    response([], '2026-09-02', '2026-10-31', 17),
+    '2026-09-02',
+    60,
+    new Date('2026-09-02T12:00:00.000Z'),
+  );
+  assert.deepEqual(merged.events.map((item) => item.id), ['today', 'day-30', 'day-59']);
+  assert.deepEqual(merged.futureCoverage, {
+    latestEventDate: '2026-10-31',
+    activeDates: 3,
+    eventsAfter30Days: 2,
+    sourcesAfter30Days: 2,
+  });
 });
 
 test('deduplicates the same official event across collection lanes', () => {

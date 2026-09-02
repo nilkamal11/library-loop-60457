@@ -83,7 +83,7 @@ const parameterGroups = [
     title: 'Public calendar',
     items: [
       ['Home area', 'ZIP 60457; reference center 41.7244, -87.8273'],
-      ['Visitor window', '7 days; API accepts 1–7 days'],
+      ['Visitor window', '60 days; API accepts 1–60 days, with 7/30/60 views'],
       ['Distance', '5, 10, or 15 mile filters; uploads validate at 15.5 miles or less'],
       ['Time zone', 'America/Chicago; displayed in local Central time'],
       ['Default audience', 'Ages 7–16 overlap; clearly teen-only events are opt-in'],
@@ -96,6 +96,8 @@ const parameterGroups = [
     title: 'Structured collection',
     items: [
       ['Configured sources', `${structuredSources.length} official feeds`],
+      ['Collection window', '60 future days, refreshed into saved indexed event rows'],
+      ['Coverage meaning', '60-day collection target; each organizer controls how far ahead it publishes'],
       ['Parallelism', '5 feeds at a time'],
       ['Request timeout', '12 seconds per request'],
       ['robots.txt timeout', '8 seconds'],
@@ -128,7 +130,8 @@ const parameterGroups = [
       ['Upload size', '1,500,000 UTF-8 bytes'],
       ['Descriptions', '420 characters in the overnight normalizer'],
       ['Writes', 'Reviewed source IDs only; idempotent run IDs; atomic D1 updates'],
-      ['Last-known-good', 'Empty, failed, blocked, or stale results do not erase newer usable events'],
+      ['Structured retention', 'Three newest runs plus the newest widest-window fallback; up to 6,000 events per run'],
+      ['Last-known-good', 'Empty, failed, blocked, stale, or incomplete page reads do not erase later usable events'],
     ],
   },
   {
@@ -188,7 +191,7 @@ export default function SourcesPage() {
           <ol className="process-grid">
             <li><span>1</span><div><strong>Collect</strong><p>Reviewed feeds and official public pages are checked on a daily schedule.</p></div></li>
             <li><span>2</span><div><strong>Validate</strong><p>Dates, distance, audience, URLs, duplicates, and source identity are checked conservatively.</p></div></li>
-            <li><span>3</span><div><strong>Save</strong><p>One merged D1 snapshot is served, so visitors do not wait on dozens of outside calendars.</p></div></li>
+            <li><span>3</span><div><strong>Save</strong><p>Indexed event rows are merged into one fast calendar, so visitors do not wait on dozens of outside sites.</p></div></li>
           </ol>
           <div className="safety-note"><strong>Safe-stop rules</strong><p>Both collection lanes honor robots.txt. They stop at login, password fields, CAPTCHA, anti-bot challenges, access denied, unreviewed redirects, stale writes, or ambiguous content. Organizers remain the authority for final details.</p></div>
         </section>

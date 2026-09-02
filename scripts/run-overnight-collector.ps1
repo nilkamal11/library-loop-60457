@@ -13,7 +13,7 @@ $logPath = Join-Path $runLogPath "$timestamp-$Mode.log"
 try {
   $corepackPath = (Get-Command corepack.cmd -ErrorAction Stop).Source
   $commandArguments = switch ($Mode) {
-    'upload' { @('pnpm', 'run', 'collect:overnight') }
+    'upload' { @('pnpm', 'run', 'collect:browser') }
     'dry-run' { @('pnpm', 'run', 'collect:dry-run') }
     'list-sources' { @('pnpm', 'exec', 'node', 'collector/run.mjs', '--list-sources') }
   }
@@ -25,24 +25,28 @@ try {
     if (Test-Path -LiteralPath $stdoutPath) { Get-Content -LiteralPath $stdoutPath | Out-File -LiteralPath $logPath -Append -Encoding utf8 }
     if (Test-Path -LiteralPath $stderrPath) { Get-Content -LiteralPath $stderrPath | Out-File -LiteralPath $logPath -Append -Encoding utf8 }
     $collectorExitCode = $collectorProcess.ExitCode
-    if ($Mode -eq 'upload' -and $collectorExitCode -eq 0) {
+    if ($Mode -eq 'upload') {
       $snapshotDate = (Get-Date).ToString('yyyy-MM-dd')
-      $snapshotUrl = "https://library-loop-60457.nilkamals463352.chatgpt.site/api/events?start=$snapshotDate&days=7&refresh=1"
+      $snapshotUrl = "https://library-loop-60457.nilkamals463352.chatgpt.site/api/events?start=$snapshotDate&days=60&refresh=1"
       $refreshToken = [Environment]::GetEnvironmentVariable('LIBRARY_LOOP_INGEST_TOKEN', 'Process')
       if ([string]::IsNullOrWhiteSpace($refreshToken)) {
         $refreshToken = [Environment]::GetEnvironmentVariable('LIBRARY_LOOP_INGEST_TOKEN', 'User')
       }
       if ([string]::IsNullOrWhiteSpace($refreshToken)) { throw 'The calendar refresh token is not configured.' }
       $snapshotHeaders = @{ Authorization = "Bearer $refreshToken" }
-      $snapshotResponse = Invoke-WebRequest -Uri $snapshotUrl -Headers $snapshotHeaders -UseBasicParsing -TimeoutSec 180
+      $snapshotResponse = Invoke-WebRequest -Uri $snapshotUrl -Headers $snapshotHeaders -UseBasicParsing -TimeoutSec 300
       if ($snapshotResponse.StatusCode -lt 200 -or $snapshotResponse.StatusCode -ge 300) {
         throw "Daily calendar snapshot returned HTTP $($snapshotResponse.StatusCode)."
       }
       $snapshot = $snapshotResponse.Content | ConvertFrom-Json
       if ($snapshot.persisted -ne $true) { throw 'Daily calendar snapshot did not confirm persistence.' }
+      $expectedSnapshotEnd = [DateTime]::ParseExact($snapshotDate, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture).AddDays(59).ToString('yyyy-MM-dd')
+      if ($snapshot.window.start -ne $snapshotDate -or [int]$snapshot.window.days -ne 60 -or $snapshot.window.end -ne $expectedSnapshotEnd) {
+        throw 'Daily calendar snapshot did not confirm the requested 60-day window.'
+      }
       $eventCount = @($snapshot.events).Count
       $sourceCount = $snapshot.sourceStatus.attempted
-      "Daily calendar snapshot refreshed (HTTP $($snapshotResponse.StatusCode)): $eventCount events from $sourceCount configured sources." | Out-File -LiteralPath $logPath -Append -Encoding utf8
+      "60-day calendar refreshed (HTTP $($snapshotResponse.StatusCode)): $eventCount events from $sourceCount configured sources." | Out-File -LiteralPath $logPath -Append -Encoding utf8
     }
   } finally {
     Remove-Item -LiteralPath $stdoutPath -Force -ErrorAction SilentlyContinue

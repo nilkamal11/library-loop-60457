@@ -390,7 +390,7 @@ export function validateIngestPayload(payload) {
   const seenSources = new Set();
   let totalEvents = 0;
   for (const result of payload.sourceResults) {
-    const allowedKeys = new Set(['sourceId', 'sourceName', 'status', 'error', 'events']);
+    const allowedKeys = new Set(['sourceId', 'sourceName', 'status', 'complete', 'error', 'events']);
     for (const key of Object.keys(result ?? {})) if (!allowedKeys.has(key)) throw new TypeError(`Source result contains unsupported field: ${key}`);
     if (typeof result?.sourceId !== 'string' || !/^[a-z0-9-]{3,100}$/.test(result.sourceId)) throw new TypeError('Source result has an invalid sourceId');
     const configuredSource = allowedSources.get(result.sourceId);
@@ -399,6 +399,7 @@ export function validateIngestPayload(payload) {
     seenSources.add(result.sourceId);
     if (typeof result.sourceName !== 'string' || result.sourceName !== configuredSource.name || result.sourceName.length > 180) throw new TypeError('Source result has an invalid sourceName');
     if (!['success', 'empty', 'failed', 'blocked'].includes(result.status)) throw new TypeError(`Invalid source status: ${result.status}`);
+    if (result.complete !== undefined && typeof result.complete !== 'boolean') throw new TypeError('Source result complete must be a boolean');
     if (!Array.isArray(result.events) || result.events.length > MAX_EVENTS_PER_SOURCE) throw new TypeError('Source events must be a bounded array');
     if (result.error !== undefined && (typeof result.error !== 'string' || result.error.length > 500)) throw new TypeError('Source error must be a short string');
     if (result.status === 'success' && result.events.length === 0) throw new TypeError('A successful source must include at least one event');

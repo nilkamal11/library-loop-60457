@@ -44,6 +44,22 @@ test('nested JSON-LD Event becomes a child-safe LiveEvent', () => {
   assert.equal(normalized.events[0].category, 'Build');
 });
 
+test('the future window includes day 0 through day 59 and excludes day 60', () => {
+  const candidate = (dateKey) => ({
+    title: `Family activity ${dateKey}`,
+    start: `${dateKey}T10:00:00-05:00`,
+    description: 'A family activity for kids ages 7-12.',
+    url: `https://example.org/events/${dateKey}`,
+  });
+  const normalized = normalizeCandidates([
+    candidate('2026-08-30'),
+    candidate('2026-10-28'),
+    candidate('2026-10-29'),
+    candidate('2026-10-30'),
+  ], source, { start: '2026-08-30', end: '2026-10-29' });
+  assert.deepEqual(normalized.events.map((item) => item.dateKey), ['2026-08-30', '2026-10-28']);
+});
+
 test('teen-only events remain explicit and adult/unknown events are not accepted', () => {
   const teen = classifyAudience('Teen studio for ages 13+');
   assert.equal(teen.decision, 'accepted');
@@ -87,7 +103,7 @@ test('ingest validation requires explicit teenOnly and the exact source contract
     runId: 'library-loop-test-0001',
     collectedAt: '2026-08-30T20:00:00.000Z',
     adapterVersion: 'library-loop-browser-v1',
-    sourceResults: [{ sourceId: source.id, sourceName: source.name, status: 'success', events: [event] }],
+    sourceResults: [{ sourceId: source.id, sourceName: source.name, status: 'success', complete: false, events: [event] }],
   };
   assert.equal(event.teenOnly, true);
   assert.equal(validateIngestPayload(payload), true);
@@ -95,6 +111,9 @@ test('ingest validation requires explicit teenOnly and the exact source contract
   const invalid = structuredClone(payload);
   delete invalid.sourceResults[0].events[0].teenOnly;
   assert.throws(() => validateIngestPayload(invalid), /teenOnly/);
+  const invalidCompleteness = structuredClone(payload);
+  invalidCompleteness.sourceResults[0].complete = 'sometimes';
+  assert.throws(() => validateIngestPayload(invalidCompleteness), /complete must be a boolean/);
 });
 
 test('local validation enforces the same 3000-event batch cap as the server', () => {

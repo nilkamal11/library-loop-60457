@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { formatDuration, formatEventDateTime, formatEventTime, makeDateStrip, type LiveEvent } from '@/lib/live-event';
+import { addDays, chicagoTodayKey, formatDuration, formatEventDateTime, formatEventTime, makeDateStrip, type LiveEvent } from '@/lib/live-event';
+import { CALENDAR_HORIZON_DAYS, CALENDAR_RANGE_OPTIONS } from '@/lib/calendar-config';
 import type { CalendarPayload } from '@/lib/calendar-read-model';
 import SiteHeader from '@/app/site-header';
 
@@ -17,8 +18,14 @@ function formatSavedAt(value: string) {
 
 function formatShortDate(key: string) {
   return new Intl.DateTimeFormat('en-US', {
-    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC',
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
   }).format(new Date(`${key}T12:00:00Z`));
+}
+
+function formatMonth(key: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long', year: 'numeric', timeZone: 'UTC',
+  }).format(new Date(`${key}-01T12:00:00Z`));
 }
 
 function searchable(event: LiveEvent) {
@@ -29,6 +36,8 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
   const [data, setData] = useState(initialData);
   const [query, setQuery] = useState('');
   const [date, setDate] = useState('all');
+  const [month, setMonth] = useState('all');
+  const [rangeDays, setRangeDays] = useState(Math.min(CALENDAR_HORIZON_DAYS, data.requestedWindow.days));
   const [radius, setRadius] = useState('15');
   const [category, setCategory] = useState('all');
   const [showTeens, setShowTeens] = useState(false);
@@ -40,17 +49,35 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
   const dialogRef = useRef<HTMLElement>(null);
   const openerRef = useRef<HTMLButtonElement | null>(null);
 
-  const dates = useMemo(() => makeDateStrip(data.requestedWindow.start), [data.requestedWindow.start]);
-  const categories = useMemo(() => [...new Set(data.events.map((event) => event.category))].sort(), [data.events]);
+  const dates = useMemo(() => makeDateStrip(data.requestedWindow.start, rangeDays), [data.requestedWindow.start, rangeDays]);
+  const months = useMemo(() => [...new Set(dates.map((item) => item.key.slice(0, 7)))], [dates]);
+  const visibleEndExclusive = useMemo(() => addDays(data.requestedWindow.start, rangeDays), [data.requestedWindow.start, rangeDays]);
+  const categories = useMemo(() => [...new Set([
+    ...data.events.map((event) => event.category),
+    ...(category === 'all' ? [] : [category]),
+  ])].sort(), [category, data.events]);
+  const availableDateKeys = useMemo(() => new Set(data.events
+    .filter((event) => event.dateKey >= data.requestedWindow.start && event.dateKey < visibleEndExclusive)
+    .map((event) => event.dateKey)), [data.events, data.requestedWindow.start, visibleEndExclusive]);
 
-  const filteredWithoutDate = useMemo(() => {
+  const filteredAcrossHorizon = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return data.events.filter((event) =>
-      event.distance <= Number(radius)
+      event.dateKey >= data.requestedWindow.start
+      && event.distance <= Number(radius)
       && (showTeens || !event.teenOnly)
       && (category === 'all' || event.category === category)
       && (!needle || searchable(event).includes(needle)));
-  }, [category, data.events, query, radius, showTeens]);
+  }, [category, data.events, data.requestedWindow.start, query, radius, showTeens]);
+
+  const filteredWithoutDate = useMemo(() =>
+    filteredAcrossHorizon.filter((event) => event.dateKey < visibleEndExclusive),
+  [filteredAcrossHorizon, visibleEndExclusive]);
+
+  const countsByRange = useMemo(() => new Map(CALENDAR_RANGE_OPTIONS.map((days) => [
+    days,
+    filteredAcrossHorizon.filter((event) => event.dateKey < addDays(data.requestedWindow.start, days)).length,
+  ])), [data.requestedWindow.start, filteredAcrossHorizon]);
 
   const countsByDate = useMemo(() => {
     const counts = new Map<string, number>();
@@ -58,9 +85,30 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
     return counts;
   }, [filteredWithoutDate]);
 
+  const countsByMonth = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const event of filteredWithoutDate) {
+      const key = event.dateKey.slice(0, 7);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [filteredWithoutDate]);
+
   const filteredEvents = useMemo(() =>
-    filteredWithoutDate.filter((event) => date === 'all' || event.dateKey === date),
-  [date, filteredWithoutDate]);
+    filteredWithoutDate.filter((event) =>
+      (month === 'all' || event.dateKey.startsWith(month))
+      && (date === 'all' || event.dateKey === date)),
+  [date, filteredWithoutDate, month]);
+
+  const visibleFutureCoverage = useMemo(() => {
+    const futureStart = addDays(data.requestedWindow.start, 30);
+    const laterEvents = filteredAcrossHorizon.filter((event) => event.dateKey >= futureStart);
+    return {
+      latestEventDate: filteredAcrossHorizon.reduce((latest, event) => event.dateKey > latest ? event.dateKey : latest, ''),
+      eventCount: laterEvents.length,
+      sourceCount: new Set(laterEvents.map((event) => event.source)).size,
+    };
+  }, [data.requestedWindow.start, filteredAcrossHorizon]);
 
   useEffect(() => {
     if (!selected) return;
@@ -100,6 +148,8 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
   const clearFilters = () => {
     setQuery('');
     setDate('all');
+    setMonth('all');
+    setRangeDays(CALENDAR_HORIZON_DAYS);
     setRadius('15');
     setCategory('all');
     setShowTeens(false);
@@ -112,12 +162,18 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 8_000);
     try {
-      const response = await fetch(`/api/calendar?start=${data.requestedWindow.start}&days=7`, {
+      const retryStart = chicagoTodayKey();
+      const response = await fetch(`/api/calendar?start=${retryStart}&days=${data.requestedWindow.days}`, {
         signal: controller.signal,
         cache: 'no-store',
       });
       if (!response.ok) throw new Error('Calendar request failed');
       setData(await response.json() as CalendarPayload);
+      if (retryStart !== data.requestedWindow.start) {
+        setDate('all');
+        setMonth('all');
+        setLimit(PAGE_SIZE);
+      }
     } catch {
       setRetryError('The retry did not finish. The saved page data remains available.');
     } finally {
@@ -132,22 +188,35 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
         : data.health === 'overnight-only' ? 'Overnight data only'
           : 'Calendar unavailable';
 
+  const rangeEnd = addDays(data.requestedWindow.start, rangeDays - 1);
+  const eventDates = dates.filter((item) => availableDateKeys.has(item.key) || item.key === date);
+  const resultHeading = date !== 'all'
+    ? formatShortDate(date)
+    : month !== 'all'
+      ? formatMonth(month)
+      : `${formatShortDate(data.requestedWindow.start)}–${formatShortDate(rangeEnd)}`;
+  const futureCoverageMessage = visibleFutureCoverage.latestEventDate
+    ? visibleFutureCoverage.eventCount > 0
+      ? `Across the full 60-day calendar, ${visibleFutureCoverage.eventCount} events matching the other filters are saved 30–60 days ahead from ${visibleFutureCoverage.sourceCount} sources. Listings reach ${formatShortDate(visibleFutureCoverage.latestEventDate)}.`
+      : `No events matching the other filters are currently saved 30–60 days ahead. Saved matching listings reach ${formatShortDate(visibleFutureCoverage.latestEventDate)}; the calendar checks again every day.`
+    : 'No matching future listings are currently saved; the calendar checks every configured source again each day.';
+
   return (
     <>
       <SiteHeader active="events" radius={radius} />
       <main id="main-content">
       <section className="intro" aria-labelledby="page-title">
         <div>
-          <p className="kicker">Things to do in the next seven days</p>
+          <p className="kicker">Plan up to two months ahead</p>
           <h1 id="page-title">Find a good outing.</h1>
           <p>Library, park, recreation, and nature events for kids and families near 60457.</p>
         </div>
-        <div className="week-total"><strong>{filteredEvents.length}</strong><span>matching events</span></div>
+        <div className="range-total"><strong>{filteredEvents.length}</strong><span>matching events</span></div>
       </section>
 
       <section className={`health-banner ${data.health}`} aria-live="polite">
         <div><strong>{healthLabel}</strong><span>{data.message}</span></div>
-        <p>Saved {formatSavedAt(data.updatedAt)} · {data.sourceStatus.connected}/{data.sourceStatus.attempted} responding · {data.sourceStatus.empty} with no matching events{data.sourceStatus.retained ? ` · ${data.sourceStatus.retained} retained` : ''}{data.sourceStatus.failed ? ` · ${data.sourceStatus.failed} unavailable` : ''}{data.structuredSnapshot ? ` · structured ${formatShortDate(data.structuredSnapshot.start)}–${formatShortDate(data.structuredSnapshot.end)}` : ''}</p>
+        <p>Saved {formatSavedAt(data.updatedAt)} · {data.sourceStatus.connected}/{data.sourceStatus.attempted} responding · {data.sourceStatus.empty} with no matching events{data.sourceStatus.retained ? ` · ${data.sourceStatus.retained} retained or partial` : ''}{data.sourceStatus.failed ? ` · ${data.sourceStatus.failed} unavailable` : ''}{data.structuredSnapshot ? ` · collection window ${formatShortDate(data.structuredSnapshot.start)}–${formatShortDate(data.structuredSnapshot.end)}` : ''}</p>
         {(data.health !== 'current' || retryError) && <button type="button" onClick={retry} disabled={refreshing}>{refreshing ? 'Checking…' : 'Retry saved feed'}</button>}
         {retryError && <small>{retryError}</small>}
       </section>
@@ -160,17 +229,21 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
         <button className="clear-button" type="button" onClick={clearFilters}>Clear filters</button>
       </section>
 
-      <nav className="date-filter" aria-label="Filter by date">
-        <button type="button" className={date === 'all' ? 'active' : ''} aria-pressed={date === 'all'} onClick={() => { setDate('all'); setLimit(PAGE_SIZE); }}><b>All</b><span>{filteredWithoutDate.length}</span></button>
-        {dates.map((item) => <button type="button" key={item.key} className={date === item.key ? 'active' : ''} aria-pressed={date === item.key} onClick={() => { setDate(item.key); setLimit(PAGE_SIZE); }}><b>{item.day} {item.date}</b><span>{countsByDate.get(item.key) ?? 0}</span></button>)}
-      </nav>
+      <section className="date-filter" aria-label="Plan by date range">
+        <div className="date-filter-copy"><strong>Plan ahead</strong><span>{futureCoverageMessage}</span></div>
+        <div className="range-options" role="group" aria-label="Planning horizon">
+          {CALENDAR_RANGE_OPTIONS.map((days) => <button type="button" key={days} className={rangeDays === days ? 'active' : ''} aria-pressed={rangeDays === days} onClick={() => { setRangeDays(days); setMonth('all'); setDate('all'); setLimit(PAGE_SIZE); }}><b>{days} days</b><span>{countsByRange.get(days) ?? 0}</span></button>)}
+        </div>
+        <label><span>Month</span><select value={month} onChange={(event) => { setMonth(event.target.value); setDate('all'); setLimit(PAGE_SIZE); }}><option value="all">All months</option>{months.map((item) => <option value={item} key={item}>{formatMonth(item)} ({countsByMonth.get(item) ?? 0})</option>)}</select></label>
+        <label><span>Exact event date</span><select value={date} onChange={(event) => { setDate(event.target.value); setMonth('all'); setLimit(PAGE_SIZE); }}><option value="all">Any event date</option>{eventDates.map((item) => <option value={item.key} key={item.key}>{item.label}, {item.key.slice(0, 4)} ({countsByDate.get(item.key) ?? 0})</option>)}</select></label>
+      </section>
 
       <section className="results" aria-labelledby="results-title">
-        <div className="results-heading"><div><p className="kicker">Saved event listings</p><h2 id="results-title">{date === 'all' ? `${formatShortDate(data.requestedWindow.start)}–${formatShortDate(data.requestedWindow.end)}` : formatShortDate(date)}</h2></div><span>Showing {Math.min(limit, filteredEvents.length)} of {filteredEvents.length}</span></div>
+        <div className="results-heading"><div><p className="kicker">Saved event listings</p><h2 id="results-title">{resultHeading}</h2></div><span aria-live="polite">Showing {Math.min(limit, filteredEvents.length)} of {filteredEvents.length}</span></div>
         {filteredEvents.length ? <div className="event-grid">
           {filteredEvents.slice(0, limit).map((event) => {
             const time = formatEventTime(event);
-            return <article className="event-card" key={event.id}>
+            return <article className="event-card" key={`${event.source}|${event.id}|${event.startLocal}`}>
               <div className="event-date"><span>{formatShortDate(event.dateKey)}</span><strong>{time.time}{time.period && <small> {time.period}</small>}</strong></div>
               <div className="event-body">
                 <div className="event-tags"><span>{event.ages}</span><span>{event.category}</span>{event.scheduleNotice && <span className="warning">Schedule update</span>}</div>

@@ -1,6 +1,6 @@
 # Library Loop 60457
 
-Library Loop is a rolling seven-day calendar of public library, park, recreation, nature, and family events within 15 miles of ZIP 60457. The default view is for children and families whose interests overlap ages 7–16; clearly teen-only events are opt-in.
+Library Loop is a rolling 60-day calendar of public library, park, recreation, nature, and family events within 15 miles of ZIP 60457. The default view is for children and families whose interests overlap ages 7–16; clearly teen-only events are opt-in.
 
 Live site: [library-loop-60457.nilkamals463352.chatgpt.site](https://library-loop-60457.nilkamals463352.chatgpt.site/)
 
@@ -17,7 +17,9 @@ Two reviewed collection lanes update that saved calendar:
 1. An authenticated hosted refresh reads configured official structured feeds, applies strict youth/family evidence rules, validates HTTPS and same-origin redirects, honors robots.txt, and preserves last-known-good records when a source fails or unexpectedly returns no usable events.
 2. A local overnight Playwright collector covers configured official public pages that do not offer dependable structured feeds. It validates and signs each batch before uploading it to the production ingest endpoint.
 
-The visitor read model selects the newest saved structured snapshot that overlaps the requested dates, merges the current overnight snapshot, removes duplicates, filters the requested seven-day window, and reports partial or stale coverage honestly.
+The visitor read model selects the newest saved structured run that covers the requested dates, reads its indexed event rows, merges the current overnight snapshot, removes duplicates, and reports partial or stale coverage honestly. Visitors can switch among the next 7, 30, or 60 days and narrow to a month or exact date without triggering external collection.
+
+Structured runs are stored as normalized event rows rather than one oversized JSON record. The three newest structured runs plus the newest widest-window run are retained for safe fallback, and incomplete browser-page reads merge with existing source events instead of erasing later last-known-good listings.
 
 ## Local development
 
@@ -52,7 +54,7 @@ The upload contract allows at most 200 events per source, 3,000 events per batch
 
 Scheduling is external to the repository. The primary Windows task runs the overnight upload at 2:15 AM. The separate 4:00 AM fallback checks the current-night audit and task state first, and runs only when there is no accepted upload and no collector already running.
 
-[`scripts/run-overnight-collector.ps1`](scripts/run-overnight-collector.ps1) is the noninteractive task entry point. It writes ignored logs under `collector/runs/scheduled/`, keeps routine native stderr from aborting the wrapper, and performs the authenticated structured refresh only after an accepted overnight upload.
+[`scripts/run-overnight-collector.ps1`](scripts/run-overnight-collector.ps1) is the noninteractive task entry point used by `pnpm collect:overnight`. It writes ignored logs under `collector/runs/scheduled/`, keeps routine native stderr from aborting the wrapper, and performs the independent 60-day structured refresh even when the browser lane has source problems. `pnpm collect:browser` runs only the signed browser upload.
 
 ## Deployment
 

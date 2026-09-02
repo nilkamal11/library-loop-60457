@@ -8,6 +8,8 @@ export type CollectorSourceResult = {
   sourceId: string;
   sourceName: string;
   status: CollectorStatus;
+  /** True only when the collector proved it scanned the complete configured window. */
+  complete?: boolean;
   error?: string;
   events: LiveEvent[];
 };
@@ -94,6 +96,7 @@ export function parseCollectorBatch(value: unknown): CollectorBatch | null {
       || seen.has(candidate.sourceId as string)
       || !boundedString(candidate.sourceName, 180)
       || !['success', 'empty', 'failed', 'blocked'].includes(candidate.status as string)
+      || (candidate.complete !== undefined && typeof candidate.complete !== 'boolean')
       || !Array.isArray(candidate.events)
       || candidate.events.length > MAX_EVENTS_PER_SOURCE
       || (candidate.error !== undefined && !boundedString(candidate.error, 500, false))) return null;

@@ -13,6 +13,7 @@ function validPayload() {
       sourceId: 'justice-public-library',
       sourceName: 'Justice Public Library District',
       status: 'success',
+      complete: false,
       events: [{
         id: 'collector-justice-public-library-1234567890',
         title: 'Family Game Night',

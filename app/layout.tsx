@@ -10,13 +10,13 @@ export const metadata: Metadata = {
   icons: { icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }] },
   openGraph: {
     title: 'Library Loop | Find a good outing',
-    description: 'A practical seven-day guide to kids and family events near 60457.',
+    description: 'A practical 60-day guide to kids and family events near 60457.',
     images: [{ url: `${siteUrl}/og.png`, width: 1200, height: 630, alt: 'Library Loop — find a good outing near 60457' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Library Loop | Find a good outing',
-    description: 'A practical seven-day guide to kids and family events near 60457.',
+    description: 'A practical 60-day guide to kids and family events near 60457.',
     images: [`${siteUrl}/og.png`],
   },
 };

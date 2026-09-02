@@ -1,5 +1,6 @@
 import { addDays, chicagoTodayKey, type EventsResponse, type LiveEvent } from '@/lib/live-event';
-import { collectorDatabase, collectorEnv, ensureCollectorSchema, readDailyCalendarSnapshot, readLatestDailyCalendarSnapshot, writeDailyCalendarSnapshot } from '@/lib/collector-db';
+import { CALENDAR_HORIZON_DAYS, calendarDays, isValidDateKey } from '@/lib/calendar-config';
+import { collectorDatabase, collectorEnv, ensureCollectorSchema, readDailyCalendarSnapshot, readLatestDailyCalendarSnapshot, writeDailyCalendarSnapshot, type StructuredSourceReceipt } from '@/lib/collector-db';
 import { ZIP_CENTER, structuredSources, type FeedConfig, type FeedType } from '@/lib/source-catalog';
 
 export const runtime = 'edge';
@@ -848,7 +849,7 @@ async function fetchFeed(feed: FeedConfig, start: string, end: string) {
     const endpoint = new URL(feed.endpoint);
     const startInstant = Date.parse(`${start}T00:00:00Z`);
     const endInstant = Date.parse(`${end}T00:00:00Z`);
-    const windowDays = Math.max(1, Math.ceil((endInstant - startInstant) / 86_400_000) + 1);
+    const windowDays = Math.max(1, Math.ceil((endInstant - startInstant) / 86_400_000));
     endpoint.searchParams.set('event_type', '0');
     endpoint.searchParams.set('req', JSON.stringify({ private: false, date: start, days: windowDays }));
     const response = await fetchWithTimeout(endpoint.toString());
@@ -877,13 +878,17 @@ async function fetchFeed(feed: FeedConfig, start: string, end: string) {
     const endpoint = new URL(feed.endpoint);
     const items: string[] = [];
     const seen = new Set<string>();
-    for (let page = 1; page <= (feed.maxPages ?? 1); page += 1) {
+    let reachedEndOrExhausted = false;
+    for (let page = 1; page <= (feed.maxPages ?? 30); page += 1) {
       endpoint.searchParams.set('page', String(page));
       const response = await fetchWithTimeout(endpoint.toString());
       const xml = await response.text();
       if (!/<rss\b/i.test(xml)) throw new Error('Invalid BiblioCommons RSS response');
       const pageItems = parseRssItems(xml);
-      if (!pageItems.length) break;
+      if (!pageItems.length) {
+        reachedEndOrExhausted = true;
+        break;
+      }
       let newItems = 0;
       for (const item of pageItems) {
         const key = xmlText(item, 'guid') || item;
@@ -892,13 +897,20 @@ async function fetchFeed(feed: FeedConfig, start: string, end: string) {
         items.push(item);
         newItems += 1;
       }
-      if (!newItems) break;
+      if (!newItems) {
+        reachedEndOrExhausted = true;
+        break;
+      }
       const latestDate = pageItems.reduce((latest, item) => {
         const date = xmlText(item, 'bc:start_date_local').slice(0, 10);
         return date > latest ? date : latest;
       }, '');
-      if (latestDate >= end) break;
+      if (latestDate >= end) {
+        reachedEndOrExhausted = true;
+        break;
+      }
     }
+    if (!reachedEndOrExhausted) throw new Error('BiblioCommons pagination reached its reviewed safety cap');
     return items
       .map((item) => normalizeBibliocommons(item, feed, start, end))
       .filter((event): event is LiveEvent => Boolean(event));
@@ -934,7 +946,10 @@ async function fetchFeed(feed: FeedConfig, start: string, end: string) {
   const response = await fetchWithTimeout(endpoint.toString());
   const payload = await response.json() as UnknownRecord;
   const records = Array.isArray(payload.events) ? [...payload.events] : [];
-  const totalPages = Math.min(Number(payload.total_pages) || 1, feed.maxPages ?? 1);
+  const reportedPages = Number(payload.total_pages) || 1;
+  const maxPages = feed.maxPages ?? 20;
+  if (reportedPages > maxPages) throw new Error(`Event pagination exceeded the ${maxPages}-page safety cap`);
+  const totalPages = Math.min(reportedPages, maxPages);
   for (let page = 2; page <= totalPages; page += 1) {
     endpoint.searchParams.set('page', String(page));
     const nextResponse = await fetchWithTimeout(endpoint.toString());
@@ -965,8 +980,8 @@ async function settledPool<T, R>(items: T[], limit: number, worker: (item: T) =>
 export async function GET(request: Request) {
   const query = new URL(request.url).searchParams;
   const requestedStart = query.get('start') ?? chicagoTodayKey();
-  const start = /^\d{4}-\d{2}-\d{2}$/.test(requestedStart) ? requestedStart : chicagoTodayKey();
-  const days = Math.min(7, Math.max(1, Number.parseInt(query.get('days') ?? '7', 10) || 7));
+  const start = isValidDateKey(requestedStart) ? requestedStart : chicagoTodayKey();
+  const days = calendarDays(query.get('days'));
   const end = addDays(start, days);
   const snapshotKey = `${start}|${days}`;
   const refresh = query.get('refresh') === '1';
@@ -997,6 +1012,22 @@ export async function GET(request: Request) {
   const results = await settledPool(structuredSources, 5, async (feed) => ({ feed, events: await fetchFeed(feed, start, end) }));
   const successful = results.filter((result): result is PromiseFulfilledResult<{ feed: FeedConfig; events: LiveEvent[] }> => result.status === 'fulfilled');
   const failedSources = results.flatMap((result, index) => result.status === 'rejected' ? [structuredSources[index].name] : []);
+  const sourceReceipts: StructuredSourceReceipt[] = results.map((result, index) => {
+    const feed = structuredSources[index];
+    if (result.status === 'rejected') {
+      const message = result.reason instanceof Error ? result.reason.message : 'Structured source collection failed';
+      return { sourceId: feed.id, sourceName: feed.name, status: 'failed', eventCount: 0, latestEventDate: null, error: message.replace(/\s+/g, ' ').slice(0, 500) };
+    }
+    const latestEventDate = result.value.events.reduce((latest, event) => event.dateKey > latest ? event.dateKey : latest, '');
+    return {
+      sourceId: feed.id,
+      sourceName: feed.name,
+      status: result.value.events.length ? 'success' : 'empty',
+      eventCount: result.value.events.length,
+      latestEventDate: latestEventDate || null,
+      error: null,
+    };
+  });
   const retainedSources: string[] = [];
   const deduped = new Map<string, LiveEvent>();
   for (const [index, result] of results.entries()) {
@@ -1045,12 +1076,12 @@ export async function GET(request: Request) {
     },
   };
   try {
-    await writeDailyCalendarSnapshot(database, snapshotKey, payload);
+    await writeDailyCalendarSnapshot(database, snapshotKey, payload, sourceReceipts);
     const confirmed = await readDailyCalendarSnapshot(database, snapshotKey);
     if (!confirmed || confirmed.updatedAt !== payload.updatedAt) throw new Error('Snapshot read-back did not match');
   } catch (error) {
     console.error('Structured calendar snapshot write failed', error);
     return Response.json({ error: 'Structured calendar was collected but could not be saved' }, { status: 500, headers: { 'Cache-Control': 'no-store' } });
   }
-  return Response.json({ ...payload, persisted: true }, { headers: { 'Cache-Control': 'no-store' } });
+  return Response.json({ ...payload, persisted: true, horizonDays: CALENDAR_HORIZON_DAYS }, { headers: { 'Cache-Control': 'no-store' } });
 }
