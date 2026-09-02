@@ -241,9 +241,9 @@ export default function SourcesPage() {
           <aside><strong>Python status</strong><p>No Python is used in the current project, so there is no Python file to share. The collector is Node.js/JavaScript with Playwright; Windows scheduling uses PowerShell. Both are included on GitHub.</p></aside>
         </section>
 
-        <Link className="back-to-events" href="/">← Back to events</Link>
+        <Link className="back-to-events" href="/" prefetch={false}>← Back to events</Link>
       </main>
-      <footer><strong>Library Loop</strong><span>Transparent source coverage, conservative collection, and a fast saved calendar.</span><Link href="/">Browse events</Link></footer>
+      <footer><strong>Library Loop</strong><span>Transparent source coverage, conservative collection, and a fast saved calendar.</span><Link href="/" prefetch={false}>Browse events</Link></footer>
     </>
   );
 }

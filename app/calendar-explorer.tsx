@@ -186,7 +186,7 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
         {limit < filteredEvents.length && <button className="more-button" type="button" onClick={() => setLimit((value) => value + PAGE_SIZE)}>Show {Math.min(PAGE_SIZE, filteredEvents.length - limit)} more events</button>}
       </section>
       </main>
-      <footer><strong>Library Loop</strong><span>Updated daily from saved public calendar listings. Organizers control availability and last-minute changes.</span><Link href="/sources">Sources &amp; technology</Link></footer>
+      <footer><strong>Library Loop</strong><span>Updated daily from saved public calendar listings. Organizers control availability and last-minute changes.</span><Link href="/sources" prefetch={false}>Sources &amp; technology</Link></footer>
       {selected && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDialog(); }}>
         <section ref={dialogRef} className="event-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
           <button ref={closeRef} className="dialog-close" type="button" onClick={closeDialog} aria-label="Close event details">×</button>
