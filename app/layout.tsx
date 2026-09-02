@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   title: 'Library Loop | Kids events near 60457',
   description: 'Find saved, official library, park, recreation, and nature events for kids and families near ZIP 60457.',
   metadataBase: new URL(siteUrl),
+  icons: { icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }] },
   openGraph: {
     title: 'Library Loop | Find a good outing',
     description: 'A practical seven-day guide to kids and family events near 60457.',
@@ -23,4 +24,3 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return <html lang="en"><body>{children}</body></html>;
 }
-
