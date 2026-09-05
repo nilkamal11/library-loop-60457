@@ -1,12 +1,20 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { addDays, chicagoTodayKey, formatDuration, formatEventDateTime, formatEventTime, makeDateStrip, type LiveEvent } from '@/lib/live-event';
+import { addDays, chicagoTodayKey, formatDuration, formatEventDateTime, formatEventTime, makeDateStrip, type LiveEvent, type SourceKind } from '@/lib/live-event';
 import { CALENDAR_HORIZON_DAYS, CALENDAR_RANGE_OPTIONS } from '@/lib/calendar-config';
 import type { CalendarPayload } from '@/lib/calendar-read-model';
 import SiteHeader from '@/app/site-header';
 
 const PAGE_SIZE = 24;
+const SOURCE_KINDS: SourceKind[] = ['Library', 'Park district', 'Recreation', 'Forest preserve', 'Family guide'];
+const SOURCE_KIND_LABELS: Record<SourceKind, { badge: string; filter: string; className: string }> = {
+  Library: { badge: 'Library', filter: 'Libraries', className: 'library' },
+  'Park district': { badge: 'Park district', filter: 'Park districts', className: 'park' },
+  Recreation: { badge: 'Recreation', filter: 'Recreation', className: 'recreation' },
+  'Forest preserve': { badge: 'Nature', filter: 'Nature & preserves', className: 'nature' },
+  'Family guide': { badge: 'Family guide', filter: 'Family guides', className: 'guide' },
+};
 
 function formatSavedAt(value: string) {
   if (!value) return 'unknown';
@@ -29,7 +37,7 @@ function formatMonth(key: string) {
 }
 
 function searchable(event: LiveEvent) {
-  return [event.title, event.source, event.venue, event.ages, event.category, event.description].join(' ').toLowerCase();
+  return [event.title, event.source, event.sourceKind, event.venue, event.ages, event.category, event.description].join(' ').toLowerCase();
 }
 
 export default function CalendarExplorer({ initialData }: { initialData: CalendarPayload }) {
@@ -40,6 +48,7 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
   const [rangeDays, setRangeDays] = useState(Math.min(CALENDAR_HORIZON_DAYS, data.requestedWindow.days));
   const [radius, setRadius] = useState('15');
   const [category, setCategory] = useState('all');
+  const [sourceKind, setSourceKind] = useState<SourceKind | 'all'>('all');
   const [showTeens, setShowTeens] = useState(false);
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [selected, setSelected] = useState<LiveEvent | null>(null);
@@ -60,7 +69,7 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
     .filter((event) => event.dateKey >= data.requestedWindow.start && event.dateKey < visibleEndExclusive)
     .map((event) => event.dateKey)), [data.events, data.requestedWindow.start, visibleEndExclusive]);
 
-  const filteredAcrossHorizon = useMemo(() => {
+  const filteredByOtherFilters = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return data.events.filter((event) =>
       event.dateKey >= data.requestedWindow.start
@@ -69,6 +78,17 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
       && (category === 'all' || event.category === category)
       && (!needle || searchable(event).includes(needle)));
   }, [category, data.events, data.requestedWindow.start, query, radius, showTeens]);
+
+  const organizerCounts = useMemo(() => {
+    const counts = new Map<SourceKind, number>(SOURCE_KINDS.map((kind) => [kind, 0]));
+    for (const event of filteredByOtherFilters) counts.set(event.sourceKind, (counts.get(event.sourceKind) ?? 0) + 1);
+    return counts;
+  }, [filteredByOtherFilters]);
+
+  const filteredAcrossHorizon = useMemo(() => sourceKind === 'all'
+    ? filteredByOtherFilters
+    : filteredByOtherFilters.filter((event) => event.sourceKind === sourceKind),
+  [filteredByOtherFilters, sourceKind]);
 
   const filteredWithoutDate = useMemo(() =>
     filteredAcrossHorizon.filter((event) => event.dateKey < visibleEndExclusive),
@@ -152,6 +172,7 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
     setRangeDays(CALENDAR_HORIZON_DAYS);
     setRadius('15');
     setCategory('all');
+    setSourceKind('all');
     setShowTeens(false);
     setLimit(PAGE_SIZE);
   };
@@ -225,6 +246,7 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
         <label className="search-field"><span>Search events</span><input value={query} onChange={(event) => { setQuery(event.target.value); setLimit(PAGE_SIZE); }} placeholder="Try LEGO, art, Oak Lawn…" /></label>
         <label><span>Distance</span><select value={radius} onChange={(event) => { setRadius(event.target.value); setLimit(PAGE_SIZE); }}><option value="5">Within 5 miles</option><option value="10">Within 10 miles</option><option value="15">Within 15 miles</option></select></label>
         <label><span>Activity</span><select value={category} onChange={(event) => { setCategory(event.target.value); setLimit(PAGE_SIZE); }}><option value="all">All activities</option>{categories.map((item) => <option value={item} key={item}>{item}</option>)}</select></label>
+        <label className="organizer-filter"><span>Organizer</span><select value={sourceKind} onChange={(event) => { setSourceKind(event.target.value as SourceKind | 'all'); setLimit(PAGE_SIZE); }}><option value="all">All organizers ({filteredByOtherFilters.length})</option>{SOURCE_KINDS.map((kind) => <option value={kind} key={kind}>{SOURCE_KIND_LABELS[kind].filter} ({organizerCounts.get(kind) ?? 0})</option>)}</select></label>
         <label className="teen-toggle"><input type="checkbox" checked={showTeens} onChange={(event) => { setShowTeens(event.target.checked); setLimit(PAGE_SIZE); }} /><span><b>Include teen-only</b><small>Hidden by default</small></span></label>
         <button className="clear-button" type="button" onClick={clearFilters}>Clear filters</button>
       </section>
@@ -246,7 +268,7 @@ export default function CalendarExplorer({ initialData }: { initialData: Calenda
             return <article className="event-card" key={`${event.source}|${event.id}|${event.startLocal}`}>
               <div className="event-date"><span>{formatShortDate(event.dateKey)}</span><strong>{time.time}{time.period && <small> {time.period}</small>}</strong></div>
               <div className="event-body">
-                <div className="event-tags"><span>{event.ages}</span><span>{event.category}</span>{event.scheduleNotice && <span className="warning">Schedule update</span>}</div>
+                <div className="event-tags"><span className={`source-badge ${SOURCE_KIND_LABELS[event.sourceKind].className}`}>{SOURCE_KIND_LABELS[event.sourceKind].badge}</span><span>{event.ages}</span><span>{event.category}</span>{event.scheduleNotice && <span className="warning">Schedule update</span>}</div>
                 <h3>{event.title}</h3>
                 <p><b>{event.source}</b>{event.venue && event.venue !== event.source ? ` · ${event.venue}` : ''}</p>
                 <dl><div><dt>Distance</dt><dd>{event.distance.toFixed(1)} mi</dd></div><div><dt>Signup</dt><dd>{event.registrationStatus}</dd></div></dl>
