@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import { librarySources } from '../collector/sources.mjs';
 import { structuredSources } from './source-catalog.ts';
 
-test('public source catalog matches the 97 configured operational sources', () => {
-  assert.equal(structuredSources.length, 80);
+test('public source catalog matches the 102 configured operational sources', () => {
+  assert.equal(structuredSources.length, 85);
   assert.equal(librarySources.length, 17);
   const ids = [...structuredSources.map((source) => source.id), ...librarySources.map((source) => source.id)];
-  assert.equal(ids.length, 97);
-  assert.equal(new Set(ids).size, 97);
+  assert.equal(ids.length, 102);
+  assert.equal(new Set(ids).size, 102);
 });
 
 test('every configured source has a reviewed HTTPS location', () => {

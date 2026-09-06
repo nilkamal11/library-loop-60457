@@ -1,6 +1,6 @@
 import type { SourceKind } from './live-event';
 
-export type FeedType = 'librarycalendar' | 'tribe' | 'civicplus' | 'squarespace' | 'communico' | 'rss' | 'bibliocommons' | 'mycalendar';
+export type FeedType = 'librarycalendar' | 'tribe' | 'civicplus' | 'squarespace' | 'communico' | 'rss' | 'bibliocommons' | 'mycalendar' | 'socrata' | 'kiddo';
 
 export type BranchRule = {
   match: string;
@@ -23,6 +23,8 @@ export type FeedConfig = {
   branchRules?: BranchRule[];
   strictBranchDistance?: boolean;
   multiBranchAddress?: string;
+  curatedNatureProgram?: boolean;
+  curatedPublicEvent?: boolean;
 };
 
 export const ZIP_CENTER = { lat: 41.7244, lng: -87.8273 };
@@ -99,9 +101,10 @@ export const structuredSources: FeedConfig[] = [
     { match: '95th Street Library', distance: 19.18, address: '3015 Cedar Glade Dr, Naperville, IL 60564' },
     { match: 'Online', distance: 14.88, address: 'Online event' },
   ] },
-  { id: 'fpdcc', name: 'Forest Preserves of Cook County', endpoint: 'https://fpdcc.com/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Forest preserve', distance: 15, address: 'Venue varies', venueDistance: true, maxPages: 20 },
+  { id: 'fpdcc', name: 'Forest Preserves of Cook County', endpoint: 'https://fpdcc.com/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Forest preserve', distance: 15, address: 'Venue varies', venueDistance: true, maxPages: 20, curatedNatureProgram: true },
   { id: 'lake-katherine', name: 'Lake Katherine Nature Center', endpoint: 'https://www.lakekatherine.org/common/modules/iCalendar/iCalendar.aspx?catID=14&feed=calendar', type: 'civicplus', sourceKind: 'Forest preserve', distance: 3.6, address: '7402 Lake Katherine Dr, Palos Heights, IL 60463', detailBase: 'https://www.lakekatherine.org/calendar.aspx?EID=' },
   { id: 'western-springs-community', name: 'Western Springs Community Events', endpoint: 'https://www.wsprings.com/common/modules/iCalendar/iCalendar.aspx?catID=14&feed=calendar', type: 'civicplus', sourceKind: 'Recreation', distance: 7.8, address: 'Western Springs, IL 60558', detailBase: 'https://www.wsprings.com/calendar.aspx?EID=' },
+  { id: 'willow-springs-village-events', name: 'Willow Springs Village Events', endpoint: 'https://www.willowsprings-il.gov/events/feed/', type: 'rss', sourceKind: 'Recreation', distance: 2, address: 'Willow Springs, IL 60480', curatedPublicEvent: true },
   { id: 'chicago-ridge-parks', name: 'Chicago Ridge Park District', endpoint: 'https://chicagoridgeparks.com/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Park district', distance: 3, address: '10736 Lombard Ave, Chicago Ridge, IL 60415' },
   { id: 'summit-parks', name: 'Summit Park District', endpoint: 'https://summitparks.org/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Park district', distance: 4, address: '5700 S Archer Rd, Summit, IL 60501' },
   { id: 'oak-lawn-parks', name: 'Oak Lawn Park District', endpoint: 'https://www.olparks.com/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Park district', distance: 4, address: '9401 S Oak Park Ave, Oak Lawn, IL 60453' },
@@ -121,9 +124,13 @@ export const structuredSources: FeedConfig[] = [
   { id: 'burbank-parks', name: 'Burbank Park District', endpoint: 'https://www.burbankil.gov/common/modules/iCalendar/iCalendar.aspx?catID=29&feed=calendar', type: 'civicplus', sourceKind: 'Park district', distance: 4.7, address: '6100 W 85th St, Burbank, IL 60459', detailBase: 'https://www.burbankil.gov/calendar.aspx?EID=' },
   { id: 'palos-park-rec', name: 'Palos Park Recreation & Parks', endpoint: 'https://www.palospark.org/common/modules/iCalendar/iCalendar.aspx?catID=30&feed=calendar', type: 'civicplus', sourceKind: 'Recreation', distance: 7.5, address: '8901 W 123rd St, Palos Park, IL 60464', detailBase: 'https://www.palospark.org/calendar.aspx?EID=' },
   { id: 'north-riverside-rec', name: 'North Riverside Parks & Recreation', endpoint: 'https://www.northriverside-il.org/common/modules/iCalendar/iCalendar.aspx?catID=24&feed=calendar', type: 'civicplus', sourceKind: 'Recreation', distance: 8.5, address: '2401 S Des Plaines Ave, North Riverside, IL 60546', detailBase: 'https://www.northriverside-il.org/calendar.aspx?EID=' },
+  { id: 'riverside-rec', name: 'Riverside Parks & Recreation', endpoint: 'https://www.riverside.il.us/common/modules/iCalendar/iCalendar.aspx?catID=31&feed=calendar', type: 'civicplus', sourceKind: 'Recreation', distance: 7.1, address: 'Riverside, IL 60546', detailBase: 'https://www.riverside.il.us/calendar.aspx?EID=', curatedPublicEvent: true },
+  { id: 'beverly-arts-center', name: 'Beverly Arts Center', endpoint: 'https://thebeverlyartscenter.com/wp-json/tribe/events/v1/events', type: 'tribe', sourceKind: 'Recreation', distance: 7.9, address: '2407 W 111th St, Chicago, IL 60655', maxPages: 20 },
   { id: 'forest-park-parks', name: 'Forest Park Park District', endpoint: 'https://www.pdofp.org/events?format=json', type: 'squarespace', sourceKind: 'Park district', distance: 10.5, address: '7501 Harrison St, Forest Park, IL 60130' },
   { id: 'maywood-parks', name: 'Maywood Park District', endpoint: 'https://www.maywoodparkdistrict.org/2026-calendar?format=json', type: 'squarespace', sourceKind: 'Park district', distance: 11.3, address: '921 S 9th Ave, Maywood, IL 60153' },
   { id: 'lisle-parks', name: 'Lisle Park District', endpoint: 'https://www.calendarwiz.com/CalendarWiz_iCal.php?crd=lisleparkdistrict', type: 'civicplus', sourceKind: 'Park district', distance: 13.2, address: '1925 Ohio St, Lisle, IL 60532', icsUtc: true },
   { id: 'villa-park-events', name: 'Villa Park Parks & Recreation', endpoint: 'https://villaparkil.gov/common/modules/iCalendar/iCalendar.aspx?catID=35&feed=calendar', type: 'civicplus', sourceKind: 'Recreation', distance: 13.5, address: '320 E Wildwood Ave, Villa Park, IL 60181', detailBase: 'https://villaparkil.gov/calendar.aspx?EID=' },
   { id: 'elmwood-park-rec', name: 'Elmwood Park Parks & Recreation', endpoint: 'https://www.elmwoodpark.org/common/modules/iCalendar/iCalendar.aspx?catID=25&feed=calendar', type: 'civicplus', sourceKind: 'Recreation', distance: 14.1, address: '2 Conti Pkwy, Elmwood Park, IL 60707', detailBase: 'https://www.elmwoodpark.org/calendar.aspx?EID=' },
+  { id: 'chicago-park-district', name: 'Chicago Park District', endpoint: 'https://data.cityofchicago.org/resource/tn7v-6rnw.json', type: 'socrata', sourceKind: 'Park district', distance: 15, address: 'Venue varies', venueDistance: true },
+  { id: 'kiddo-chicago', name: 'KiddoChicago', endpoint: 'https://api.kiddochicago.com/api/events', type: 'kiddo', sourceKind: 'Family guide', distance: 15, address: 'Venue varies', venueDistance: true },
 ];

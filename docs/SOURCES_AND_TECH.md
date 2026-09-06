@@ -1,14 +1,16 @@
 # Library Loop sources and technical reference
 
-This document mirrors the public [Sources & technology page](https://library-loop-60457.nilkamals463352.chatgpt.site/sources). The live page renders its complete 97-source directory from the same manifests used by the collectors, rather than maintaining a second handwritten list.
+This document mirrors the public [Sources & technology page](https://library-loop-60457.nilkamals463352.chatgpt.site/sources). The live page renders its complete 102-source directory from the same manifests used by the collectors, rather than maintaining a second handwritten list.
 
 ## Source manifests
 
-- `lib/source-catalog.ts`: 80 reviewed structured-feed sources. This module is imported by both the structured collector and the public source directory.
+- `lib/source-catalog.ts`: 85 reviewed structured-feed sources. This module is imported by both the structured collector and the public source directory.
 - `collector/sources.mjs`: 17 reviewed browser-page sources. This module is imported by the overnight collector, the server write allowlist, and the public source directory.
-- Total: 97 unique configured sources. “Configured” does not imply that every source responds on every run.
+- Total: 102 unique configured sources. “Configured” does not imply that every source responds on every run.
 
-The structured lane currently contains 53 libraries, 15 park districts, 10 recreation sources, and 2 forest-preserve sources. Its active adapters are 27 LibraryCalendar JSON, 23 iCalendar/ICS, 19 WordPress Events API, 7 Communico JSON, 2 Squarespace JSON, 1 BiblioCommons RSS, and 1 My Calendar API. The second lane contains 17 official public library pages collected with a browser.
+The structured lane currently contains 53 libraries, 16 park districts, 13 recreation sources, 2 forest-preserve sources, and 1 attributed family guide. Its active adapters are 27 LibraryCalendar JSON, 24 iCalendar/ICS, 20 WordPress Events API, 7 Communico JSON, 2 Squarespace JSON, 1 BiblioCommons RSS, 1 My Calendar API, 1 community-event RSS feed, 1 Socrata open-data feed, and 1 KiddoChicago JSON feed. The second lane contains 17 official public library pages collected with a browser.
+
+The public directory also links to Kidlist, Mommy Poppins, Macaroni KID, Chicago Parent, and the Brookfield Zoo daily schedule as manual research leads. They are intentionally not counted as collected sources because their current terms, robots rules, or lack of a dependable event feed do not support this automated use.
 
 ## Public calendar parameters
 
@@ -23,8 +25,9 @@ The structured lane currently contains 53 libraries, 15 park districts, 10 recre
 
 ## Structured collection parameters
 
-- 80 reviewed official feeds, collected 5 at a time.
+- 85 reviewed feeds, collected 5 at a time. These now include the Chicago Park District's public Chicago Data Portal dataset, an attributed KiddoChicago discovery feed whose links point back to organizers, Willow Springs Village Events, Riverside Parks & Recreation, and Beverly Arts Center.
 - 60-day collection horizon. Window-aware WordPress and BiblioCommons adapters paginate until they cover the requested range or fail safely at a reviewed cap.
+- KiddoChicago responses fail safely above 8 MB or 10,000 raw records before normalization.
 - The 60 days are the collection target, not a promise that every organizer has published that far ahead. The public page reports the latest dates actually saved.
 - 12-second request timeout and 8-second robots.txt timeout.
 - HTTPS only, same-origin redirects only, at most 3 redirects.

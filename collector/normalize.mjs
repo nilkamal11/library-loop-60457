@@ -172,25 +172,35 @@ export function jsonLdToCandidate(record, baseUrl) {
   };
 }
 
-function explicitAge(text) {
+function explicitAge(text, structuredAudience = '') {
   const candidates = [];
+  for (const match of text.matchAll(/\bat least\s+(\d{1,2})(?:\s+years?(?:\s+\d{1,2}\s+months?)?)?\s+but\s+less\s+than\s+(\d{1,2})\b/gi)) {
+    const maximum = Math.max(Number(match[1]), Number(match[2]) - 1);
+    candidates.push({ min: Number(match[1]), max: maximum, label: `Ages ${match[1]}–${maximum}`, kind: 'age' });
+  }
   for (const match of text.matchAll(/\b(?:ages?|age)\s*:?\s*(\d{1,2})\s*(?:yrs?|years?)?\s*(?:[-–—]|to|through)\s*(\d{1,2})\b/gi)) {
-    candidates.push({ min: Number(match[1]), max: Number(match[2]), label: `Ages ${match[1]}–${match[2]}` });
+    candidates.push({ min: Number(match[1]), max: Number(match[2]), label: `Ages ${match[1]}–${match[2]}`, kind: 'age' });
+  }
+  for (const match of text.matchAll(/\b(\d{1,2})\s*(?:[-–—]|to|through)\s*(\d{1,2})\s*years?\b/gi)) {
+    candidates.push({ min: Number(match[1]), max: Number(match[2]), label: `Ages ${match[1]}–${match[2]}`, kind: 'age' });
   }
   for (const match of text.matchAll(/\b(?:ages?|age)\s*:?\s*(\d{1,2})\s*(?:\+|(?:and|&)\s*(?:up|older)|or older)(?=\s|[.,;:)]|$)/gi)) {
-    candidates.push({ min: Number(match[1]), max: 99, label: `Ages ${match[1]}+` });
+    candidates.push({ min: Number(match[1]), max: 99, label: `Ages ${match[1]}+`, kind: 'age' });
+  }
+  for (const match of structuredAudience.matchAll(/\b(\d{1,2})\s*(?:\+|(?:and|&)\s*(?:up|older)|or older)(?=\s|[.,;:)]|$)/gi)) {
+    candidates.push({ min: Number(match[1]), max: 99, label: `Ages ${match[1]}+`, kind: 'age' });
   }
   for (const match of text.matchAll(/\bgrades?\s*:?\s*([kK]|\d{1,2})(?:st|nd|rd|th)?\s*(?:[-–—]|to|through)\s*([kK]|\d{1,2})(?:st|nd|rd|th)?\b/gi)) {
     const grade = (entry) => entry.toLowerCase() === 'k' ? 0 : Number(entry);
-    candidates.push({ min: grade(match[1]) + 5, max: grade(match[2]) + 6, label: `Grades ${match[1].toUpperCase()}–${match[2].toUpperCase()}` });
+    candidates.push({ min: grade(match[1]) + 5, max: grade(match[2]) + 6, label: `Grades ${match[1].toUpperCase()}–${match[2].toUpperCase()}`, kind: 'grade' });
   }
   return candidates;
 }
 
-export function classifyAudience(value) {
+export function classifyAudience(value, structuredAudience = '') {
   const text = cleanText(value, 7_000);
   const lower = text.toLowerCase();
-  const ages = explicitAge(text);
+  const ages = explicitAge(text, cleanText(structuredAudience, 1_000));
   const overlapsTarget = ages.filter((age) => age.min <= 16 && age.max >= 7);
   const includesNine = overlapsTarget.some((age) => age.min <= 9 && age.max >= 9);
   const namedTeen = /\bteens?|teenagers?|high school|young adults?|grades?\s*(?:7|8|9|10|11|12)\b/.test(lower)
@@ -208,7 +218,7 @@ export function classifyAudience(value) {
       decision: 'accepted',
       reason: 'explicit age or grade range overlaps ages 7–16',
       ages: selected.label,
-      teenOnly: overlapsTarget.every((age) => age.min >= 12) || (!includesNine && namedTeen),
+      teenOnly: overlapsTarget.every((age) => age.min >= 13) || (selected.kind === 'grade' && !includesNine && namedTeen),
       family,
     };
   }
@@ -261,7 +271,7 @@ export function normalizeCandidate(candidate, source, window) {
     candidate.text,
     candidate.audience,
   ].filter(Boolean).join(' '), 7_000);
-  const audience = classifyAudience(fullText);
+  const audience = classifyAudience(fullText, candidate.audience);
   if (audience.decision !== 'accepted') {
     return {
       decision: audience.decision,

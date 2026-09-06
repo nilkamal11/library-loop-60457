@@ -72,6 +72,24 @@ test('teen-only events remain explicit and adult/unknown events are not accepted
   assert.equal(unknown.decision, 'review');
 });
 
+test('an explicit ages 10-13 range is not hidden by a teen label', () => {
+  const mixed = classifyAudience('Teen skyscraper club for ages 10-13');
+  assert.equal(mixed.decision, 'accepted');
+  assert.equal(mixed.ages, 'Ages 10–13');
+  assert.equal(mixed.teenOnly, false);
+
+  const teenGrades = classifyAudience('Teen volunteering for grades 6-12');
+  assert.equal(teenGrades.decision, 'accepted');
+  assert.equal(teenGrades.teenOnly, true);
+});
+
+test('recognizes bounded and years-based age formats consistently', () => {
+  assert.equal(classifyAudience('At least 6 years but less than 13').ages, 'Ages 6–12');
+  assert.equal(classifyAudience('Designed for 7 to 12 years').ages, 'Ages 7–12');
+  assert.equal(classifyAudience('Open studio', '10 and up').ages, 'Ages 10+');
+  assert.equal(classifyAudience('Adults only; materials fee $12+').decision, 'excluded');
+});
+
 test('only semantic local or offset-bearing dates are accepted', () => {
   assert.deepEqual(parseDateValue('2026-09-12'), { localIso: '2026-09-12T00:00:00', allDay: true });
   assert.deepEqual(parseDateValue('2026-09-12T10:15:00'), { localIso: '2026-09-12T10:15:00', allDay: false });

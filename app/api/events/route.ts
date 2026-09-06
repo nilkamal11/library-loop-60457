@@ -1,6 +1,8 @@
 import { addDays, chicagoTodayKey, type EventsResponse, type LiveEvent } from '@/lib/live-event';
 import { CALENDAR_HORIZON_DAYS, calendarDays, isValidDateKey } from '@/lib/calendar-config';
 import { collectorDatabase, collectorEnv, ensureCollectorSchema, readDailyCalendarSnapshot, readLatestDailyCalendarSnapshot, writeDailyCalendarSnapshot, type StructuredSourceReceipt } from '@/lib/collector-db';
+import { deriveAudience } from '@/lib/event-audience';
+import { dedupeEvents } from '@/lib/event-dedupe';
 import { ZIP_CENTER, structuredSources, type FeedConfig, type FeedType } from '@/lib/source-catalog';
 
 export const runtime = 'edge';
@@ -75,74 +77,6 @@ function isFalse(value: unknown) {
 
 function isTrue(value: unknown) {
   return value === true || value === 1 || value === '1' || value === 'true';
-}
-
-function explicitAge(text: string) {
-  const candidates: Array<{ min: number; max: number; label: string }> = [];
-  for (const exactYears of text.matchAll(/\b(?:ages?|age)\s*:?\s*(\d{1,2})\s*(?:yrs?|years?)?\s*(?:[-–—]|to|through)\s*(\d{1,2})\s*(?:yrs?|years?)\b/gi)) {
-    candidates.push({ min: Number(exactYears[1]), max: Number(exactYears[2]), label: `Ages ${exactYears[1]}–${exactYears[2]}` });
-  }
-  for (const statedYears of text.matchAll(/\b(\d{1,2})\s*(?:[-–—]|to|through)\s*(\d{1,2})\s*years?\b/gi)) {
-    candidates.push({ min: Number(statedYears[1]), max: Number(statedYears[2]), label: `Ages ${statedYears[1]}–${statedYears[2]}` });
-  }
-  for (const exact of text.matchAll(/\b(?:ages?|age)\s*:?\s*(\d{1,2})\s*(?:[-–—]|to|through)\s*(\d{1,2})\b/gi)) {
-    candidates.push({ min: Number(exact[1]), max: Number(exact[2]), label: `Ages ${exact[1]}–${exact[2]}` });
-  }
-  for (const plus of text.matchAll(/\b(?:ages?|age)\s*:?\s*(\d{1,2})\s*(?:\+|(?:and|&)\s*(?:up|older)|or older)(?=\s|[.,;:)]|$)/gi)) {
-    candidates.push({ min: Number(plus[1]), max: 99, label: `Ages ${plus[1]}+` });
-  }
-  for (const grade of text.matchAll(/\bgrades?\s*:?\s*([kK]|\d{1,2})(?:st|nd|rd|th)?\s*(?:[-–—]|to|through)\s*([kK]|\d{1,2})(?:st|nd|rd|th)?\b/gi)) {
-    const gradeNumber = (entry: string) => entry.toLowerCase() === 'k' ? 0 : Number(entry);
-    candidates.push({ min: gradeNumber(grade[1]) + 5, max: gradeNumber(grade[2]) + 6, label: `Grades ${grade[1].toUpperCase()}–${grade[2].toUpperCase()}` });
-  }
-  if (candidates.length) {
-    const matching = candidates.filter((candidate) => candidate.min <= 16 && candidate.max >= 7);
-    const selected = matching.find((candidate) => candidate.min < 13) ?? matching[0] ?? candidates[0];
-    return {
-      ...selected,
-      includesNine: matching.some((candidate) => candidate.min <= 9 && candidate.max >= 9),
-      teenOnly: matching.length > 0 && matching.every((candidate) => candidate.min >= 12),
-    };
-  }
-  const single = text.match(/\b(?:ages?|age)\s*:?\s*(\d{1,2})\b/i);
-  if (single) {
-    const value = Number(single[1]);
-    return { min: value, max: value, label: `Age ${single[1]}`, includesNine: value === 9, teenOnly: value >= 12 };
-  }
-  return null;
-}
-
-function deriveAudience(title: string, description: string, labels: string[]) {
-  const text = `${title} ${description} ${labels.join(' ')}`;
-  const lower = text.toLowerCase();
-  const age = explicitAge(text);
-  const broadAudienceLabel = labels.some((label) => /^(all|everyone|all ages)$/i.test(label.trim()));
-  const family = broadAudienceLabel || /\bfamil(?:y|ies)\b|all ages|all-ages|caregiver|parent(?:s)? and child/.test(lower);
-  const familyNamed = broadAudienceLabel || /\bfamil(?:y|ies)\b|caregiver|parent(?:s)? and child/.test(lower);
-  const namedAudience = `${title} ${labels.join(' ')}`.toLowerCase();
-  const namedTeen = /\bteens?|teenagers?|high school|young adults?\b/.test(namedAudience)
-    || namedAudience.includes('diversiteen')
-    || namedAudience.includes('volunteen')
-    || /\b(?:for teens?|teens? only|high school students?)\b/.test(lower);
-  const namedYoungerAudience = /\bchildren|kids?|youth|elementary|school[- ]age\b/.test(namedAudience);
-  const teenOnly = age
-    ? Boolean(age.teenOnly) || (!age.includesNine && namedTeen)
-    : namedTeen && !namedYoungerAudience;
-  const adultOnly = /\badults? only\b|\b18\s*(?:\+|and (?:up|older))|\b21\s*\+|\bseniors?\b|\b55\s*\+/.test(lower);
-  const youngOnly = /\b(?:bab(?:y|ies)|toddlers?|tots?|preschool(?:ers)?|birth\s*(?:-|to|through)\s*5)\b/.test(lower);
-  const administrative = /\b(board|committee|commission) meetings?\b|public hearing|bid opening|meeting minutes/.test(lower);
-  const teen = /\bteens?|tweens?|middle school|high school|grades?\b/.test(lower);
-  const youth = /\bchildren|child(?:ren)?|kids?|youth|school[- ]age|homeschool/.test(lower);
-  const adultActivity = /\b(bodypump|cycle|cycling|spin|nia|foam rolling|werq|zumba|pilates|barre|yoga|cardio|aerobics|fitness class|workout|strength training|pickleball|golf league|softball league)\b/.test(lower);
-  const adultProgram = /\b(adults?|lapidary|lunch\s*(?:&|and)\s*learn|independent housing|retirement|medicare|matinee|provider training|staff training|certification)\b/.test(lower);
-  const notAnEvent = /\b(?:library|branch|pool|office|village hall|facility|building)\s+(?:is\s+)?closed\b|\bclosed\s+(?:on|for|august|september|october|november|december|january|february|march|april|may|june|july)|delayed opening|holiday hours/.test(lower);
-  if (administrative || notAnEvent || (adultOnly && !age) || ((adultActivity || adultProgram) && !age && !teen && !youth && !familyNamed)) return { include: false, ages: '', teenOnly: false, family: false };
-  if (age) return { include: age.min <= 16 && age.max >= 7, ages: age.label, teenOnly, family };
-  if (teen) return { include: true, ages: labels.find((label) => /teen|tween/i.test(label)) ?? 'Teens / tweens', teenOnly: teenOnly || (!family && !youth && /\bteens?|high school\b/.test(lower)), family };
-  if (youngOnly) return { include: false, ages: '', teenOnly: false, family: false };
-  if (family) return { include: true, ages: 'Family / all ages', teenOnly: false, family: true };
-  if (youth) return { include: true, ages: labels.find((label) => /child|kid|youth/i.test(label)) ?? 'Kids / youth', teenOnly: false, family };
-  return { include: false, ages: '', teenOnly: false, family: false };
 }
 
 function deriveCategory(text: string) {
@@ -350,7 +284,7 @@ function normalizeTribe(record: UnknownRecord, feed: FeedConfig, start: string, 
   const fullDescription = plainText(rawDescription);
   const description = compactDescription(fullDescription);
   const labels = [...objectNames(record.categories), ...objectNames(record.tags)];
-  const audience = deriveAudience(title, fullDescription, labels);
+  const audience = deriveAudience(title, fullDescription, labels, { curatedNatureProgram: feed.curatedNatureProgram });
   if (!audience.include) return null;
   const venueRecord = record.venue && !Array.isArray(record.venue) && typeof record.venue === 'object' ? record.venue as UnknownRecord : {};
   let distance = feed.distance;
@@ -388,6 +322,122 @@ function normalizeTribe(record: UnknownRecord, feed: FeedConfig, start: string, 
     registrationUrl: registrationLink(rawDescription, record.website, url),
     url,
     scheduleNotice: scheduleNotice(`${title} ${fullDescription}`),
+  };
+}
+
+function kiddoEventTimes(dateKey: string, value: unknown) {
+  const raw = plainText(value);
+  const matches = [...raw.matchAll(/\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?\b/gi)];
+  if (!matches.length) return { startLocal: `${dateKey}T00:00:00`, allDay: true };
+  const clock = (match: RegExpMatchArray) => twelveHourClock(match[1], match[2], match[3]);
+  const startLocal = `${dateKey}T${clock(matches[0])}`;
+  const endLocal = matches[1] ? `${dateKey}T${clock(matches[1])}` : undefined;
+  return { startLocal, endLocal: endLocal && endLocal > startLocal ? endLocal : undefined, allDay: false };
+}
+
+function normalizeKiddo(record: UnknownRecord, feed: FeedConfig, start: string, end: string): LiveEvent | null {
+  const dateKey = plainText(record.date).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey) || dateKey < start || dateKey >= end) return null;
+  const coords = record.coords && typeof record.coords === 'object' && !Array.isArray(record.coords) ? record.coords as UnknownRecord : {};
+  const lat = Number(coords.lat);
+  const lng = Number(coords.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat === 0 || lng === 0) return null;
+  const distance = haversineMiles(lat, lng);
+  if (distance > 15) return null;
+
+  const title = plainText(record.title) || 'Untitled event';
+  const fullDescription = plainText(record.description);
+  const ageRange = plainText(record.ageRange);
+  const suppliedCategory = plainText(record.category);
+  const audience = deriveAudience(title, fullDescription, [ageRange, suppliedCategory].filter(Boolean), { curatedFamilyGuide: true });
+  if (!audience.include) return null;
+  const url = cleanUrl(record.sourceUrl, feed.endpoint);
+  if (!url) return null;
+  const sourceName = plainText(record.sourceName) || plainText(record.location) || 'Official organizer';
+  const venue = plainText(record.location) || sourceName;
+  const price = plainText(record.price);
+  const description = compactDescription(`${price ? `${price}. ` : ''}${fullDescription}`);
+  const registrationRequired = isTrue(record.registrationRequired);
+  const registrationStatus = registrationRequired
+    ? 'Registration required'
+    : /no registration|drop[ -]?in|walk[ -]?in/i.test(fullDescription)
+      ? 'Drop-in / no signup'
+      : 'Check official listing';
+  const times = kiddoEventTimes(dateKey, record.time);
+  return {
+    id: `${feed.id}-${stringValue(record.id) || `${dateKey}-${title}`}`,
+    title,
+    ...times,
+    dateKey,
+    source: `${sourceName} · via ${feed.name}`,
+    sourceKind: feed.sourceKind,
+    venue,
+    address: plainText(record.address) || 'See official listing',
+    distance,
+    ages: audience.ages,
+    teenOnly: audience.teenOnly,
+    family: audience.family,
+    ...deriveCategory(`${suppliedCategory} ${title} ${fullDescription}`),
+    description,
+    registrationStatus,
+    registrationUrl: url,
+    url,
+    scheduleNotice: scheduleNotice(`${title} ${fullDescription}`),
+  };
+}
+
+function linkedValue(value: unknown) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return (value as UnknownRecord).url;
+  return value;
+}
+
+function normalizeSocrata(record: UnknownRecord, feed: FeedConfig, start: string, end: string): LiveEvent | null {
+  if (plainText(record.type).toLowerCase() !== 'event') return null;
+  const startLocal = toLocalIso(record.start_date);
+  const endLocal = toLocalIso(record.end_date) || undefined;
+  const dateKey = startLocal.slice(0, 10);
+  if (!startLocal || dateKey < start || dateKey >= end) return null;
+  const lat = Number(record.latitude);
+  const lng = Number(record.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat === 0 || lng === 0) return null;
+  const distance = haversineMiles(lat, lng);
+  if (distance > 15) return null;
+
+  const title = plainText(record.title) || 'Untitled event';
+  const fullDescription = plainText(record.description);
+  const ageRange = plainText(record.age_range);
+  const suppliedCategory = plainText(record.category);
+  const audience = deriveAudience(title, fullDescription, [ageRange, suppliedCategory].filter(Boolean), { curatedPublicEvent: true });
+  if (!audience.include) return null;
+  const url = cleanUrl(linkedValue(record.information_link), feed.endpoint) || feed.endpoint;
+  const rawRegistration = stringValue(linkedValue(record.registration_link)).replace(/^http:\/\/apm\.activecommunities\.com\//i, 'https://apm.activecommunities.com/');
+  const registrationUrl = cleanUrl(rawRegistration, url) || url;
+  const venue = plainText(record.location_facility) || feed.name;
+  const address = [record.address, 'Chicago, IL', record.zip].map(plainText).filter(Boolean).join(' ');
+  const fee = Number(record.fee);
+  const price = Number.isFinite(fee) ? (fee === 0 ? 'Free.' : `$${fee.toFixed(2)}.`) : '';
+  const cancelled = /^y(?:es)?$/i.test(plainText(record.event_cancelled));
+  return {
+    id: `${feed.id}-${stringValue(record.activity_id) || `${dateKey}-${title}`}`,
+    title,
+    startLocal,
+    endLocal,
+    dateKey,
+    allDay: startLocal.endsWith('T00:00:00') && Boolean(endLocal?.endsWith('T23:59:59')),
+    source: feed.name,
+    sourceKind: feed.sourceKind,
+    venue,
+    address: address || feed.address,
+    distance,
+    ages: audience.ages,
+    teenOnly: audience.teenOnly,
+    family: audience.family,
+    ...deriveCategory(`${suppliedCategory} ${title} ${fullDescription}`),
+    description: compactDescription(`${price} ${fullDescription}`),
+    registrationStatus: registrationUrl !== url ? 'Registration link available' : 'Check official listing',
+    registrationUrl,
+    url,
+    scheduleNotice: cancelled ? 'Cancelled — check the official listing' : scheduleNotice(`${title} ${fullDescription}`),
   };
 }
 
@@ -446,19 +496,38 @@ function rssEventTimes(description: string, pubDate: string) {
   };
 }
 
+function mecEventTimes(item: string) {
+  const startDate = xmlText(item, 'mec:startDate');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return null;
+  const startHour = xmlText(item, 'mec:startHour');
+  const endDate = xmlText(item, 'mec:endDate') || startDate;
+  const endHour = xmlText(item, 'mec:endHour');
+  const clock = (value: string) => value.match(/\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?\b/i);
+  const startClock = clock(startHour);
+  const endClock = clock(endHour);
+  if (!startClock || /all\s*day/i.test(startHour)) {
+    return { startLocal: `${startDate}T00:00:00`, endLocal: `${endDate}T23:59:59`, allDay: true };
+  }
+  return {
+    startLocal: `${startDate}T${twelveHourClock(startClock[1], startClock[2], startClock[3])}`,
+    endLocal: endClock ? `${endDate}T${twelveHourClock(endClock[1], endClock[2], endClock[3])}` : undefined,
+    allDay: false,
+  };
+}
+
 function normalizeRss(item: string, feed: FeedConfig, start: string, end: string): LiveEvent | null {
   const title = xmlText(item, 'title') || 'Untitled event';
   const rawDescription = unwrapXmlValue(xmlRawValue(item, 'description'));
   const fullDescription = plainText(rawDescription);
-  const times = rssEventTimes(fullDescription, xmlText(item, 'pubDate'));
+  const times = mecEventTimes(item) ?? rssEventTimes(fullDescription, xmlText(item, 'pubDate'));
   const dateKey = times.startLocal.slice(0, 10);
   if (!times.startLocal || dateKey < start || dateKey >= end) return null;
   const labels = xmlTexts(item, 'category');
-  const audience = deriveAudience(title, fullDescription, labels);
+  const audience = deriveAudience(title, fullDescription, labels, { curatedPublicEvent: feed.curatedPublicEvent });
   if (!audience.include) return null;
   const url = cleanUrl(xmlText(item, 'link'), feed.endpoint) || feed.endpoint;
   const segments = rawDescription.split(/<br\s*\/?\s*>/gi).map((segment) => plainText(segment)).filter(Boolean);
-  const venue = segments[1] || feed.name;
+  const venue = xmlText(item, 'mec:location') || segments[1] || feed.name;
   const address = segments.length > 2 ? segments.slice(2).join(', ') : feed.address;
   return {
     id: `${feed.id}-${xmlText(item, 'guid') || `${dateKey}-${title}`}`,
@@ -638,6 +707,16 @@ function parseIcs(text: string) {
   });
 }
 
+function normalizedIcsLocation(value: string, feed: FeedConfig) {
+  const cleaned = plainText(value);
+  const descriptionShaped = /<\/?[a-z][^>]*>/i.test(value)
+    || /(?:font-family|font-size|text-decoration|background-color)\s*:/i.test(value)
+    || value.length > 500
+    || cleaned.length > 300;
+  if (descriptionShaped) return { venue: feed.name, address: feed.address };
+  return { venue: cleaned || feed.name, address: cleaned || feed.address };
+}
+
 function normalizeIcs(record: Record<string, string>, feed: FeedConfig, start: string, end: string): LiveEvent | null {
   const startLocal = feed.icsUtc && /Z$/i.test(record.DTSTART ?? '') ? instantToChicagoLocal(record.DTSTART) : toLocalIso(record.DTSTART);
   const endLocal = (feed.icsUtc && /Z$/i.test(record.DTEND ?? '') ? instantToChicagoLocal(record.DTEND) : toLocalIso(record.DTEND)) || undefined;
@@ -648,7 +727,7 @@ function normalizeIcs(record: Record<string, string>, feed: FeedConfig, start: s
   const fullDescription = plainText(rawIcsDescription);
   const description = compactDescription(fullDescription);
   const labels = stringValue(record.CATEGORIES).split(',').map((label) => plainText(label)).filter(Boolean);
-  const audience = deriveAudience(title, fullDescription, labels);
+  const audience = deriveAudience(title, fullDescription, labels, { curatedPublicEvent: feed.curatedPublicEvent });
   if (!audience.include) return null;
   const category = deriveCategory(`${title} ${fullDescription} ${labels.join(' ')}`);
   const uid = stringValue(record.UID);
@@ -657,6 +736,7 @@ function normalizeIcs(record: Record<string, string>, feed: FeedConfig, start: s
   const descriptionUrl = stringValue(record.DESCRIPTION).match(/https?:\/\/[^\s<>]+/i)?.[0] ?? '';
   const url = constructed || cleanUrl(descriptionUrl, feed.endpoint) || cleanUrl(record.URL, feed.endpoint) || feed.endpoint;
   const allDay = /^\d{8}$/.test(stringValue(record.DTSTART));
+  const location = normalizedIcsLocation(stringValue(record.LOCATION), feed);
   return {
     id: `${feed.id}-${uid || `${dateKey}-${title}`}`,
     title,
@@ -666,8 +746,8 @@ function normalizeIcs(record: Record<string, string>, feed: FeedConfig, start: s
     allDay,
     source: feed.name,
     sourceKind: feed.sourceKind,
-    venue: plainText(record.LOCATION) || feed.name,
-    address: plainText(record.LOCATION) || feed.address,
+    venue: location.venue,
+    address: location.address,
     distance: feed.distance,
     ages: audience.ages,
     teenOnly: audience.teenOnly,
@@ -822,7 +902,63 @@ async function fetchWithTimeout(url: string) {
   return response;
 }
 
+async function jsonWithByteLimit(response: Response, maximumBytes: number, label: string) {
+  const contentLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(contentLength) && contentLength > maximumBytes) throw new Error(`${label} exceeded its reviewed byte limit`);
+  if (!response.body) {
+    const text = await response.text();
+    if (new TextEncoder().encode(text).byteLength > maximumBytes) throw new Error(`${label} exceeded its reviewed byte limit`);
+    return JSON.parse(text) as unknown;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maximumBytes) {
+      await reader.cancel();
+      throw new Error(`${label} exceeded its reviewed byte limit`);
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(body)) as unknown;
+}
+
 async function fetchFeed(feed: FeedConfig, start: string, end: string) {
+  if (feed.type === 'socrata') {
+    const endpoint = new URL(feed.endpoint);
+    endpoint.searchParams.set('$where', `type='Event' AND within_circle(location,${ZIP_CENTER.lat},${ZIP_CENTER.lng},24140.16) AND start_date >= '${start}T00:00:00.000' AND start_date < '${end}T00:00:00.000'`);
+    endpoint.searchParams.set('$order', 'start_date, activity_id');
+    endpoint.searchParams.set('$limit', '2000');
+    const response = await fetchWithTimeout(endpoint.toString());
+    const payload = await response.json() as unknown;
+    if (!Array.isArray(payload)) throw new Error('Invalid Chicago Park District event response');
+    if (payload.length >= 2000) throw new Error('Chicago Park District response reached its reviewed safety cap');
+    return payload
+      .filter((record): record is UnknownRecord => Boolean(record && typeof record === 'object'))
+      .map((record) => normalizeSocrata(record, feed, start, end))
+      .filter((event): event is LiveEvent => Boolean(event));
+  }
+
+  if (feed.type === 'kiddo') {
+    const response = await fetchWithTimeout(feed.endpoint);
+    const payload = await jsonWithByteLimit(response, 8 * 1024 * 1024, 'KiddoChicago response');
+    if (!Array.isArray(payload)) throw new Error('Invalid KiddoChicago event response');
+    if (payload.length > 10000) throw new Error('KiddoChicago response exceeded its reviewed safety cap');
+    return payload
+      .filter((record): record is UnknownRecord => Boolean(record && typeof record === 'object'))
+      .map((record) => normalizeKiddo(record, feed, start, end))
+      .filter((event): event is LiveEvent => Boolean(event));
+  }
+
   if (feed.type === 'civicplus') {
     const response = await fetchWithTimeout(feed.endpoint);
     const calendar = await response.text();
@@ -1029,38 +1165,24 @@ export async function GET(request: Request) {
     };
   });
   const retainedSources: string[] = [];
-  const deduped = new Map<string, LiveEvent>();
+  const collectedEvents: LiveEvent[] = [];
   for (const [index, result] of results.entries()) {
     const feed = structuredSources[index];
     const currentEvents = result.status === 'fulfilled' ? result.value.events : [];
     const shouldRetain = result.status === 'rejected' || currentEvents.length === 0;
     const retainedEvents = shouldRetain
-      ? (previous?.events ?? []).filter((event) => event.source === feed.name && event.dateKey >= start && event.dateKey < end)
+      ? (previous?.events ?? []).filter((event) => (event.source === feed.name || (feed.type === 'kiddo' && event.source.endsWith(` · via ${feed.name}`))) && event.dateKey >= start && event.dateKey < end)
       : [];
     if (retainedEvents.length) retainedSources.push(feed.name);
     for (const event of currentEvents.length ? currentEvents : retainedEvents) {
       const retained = retainedEvents.includes(event);
-      let canonicalUrl = '';
-      try {
-        const parsed = new URL(event.url || event.registrationUrl);
-        parsed.hash = '';
-        for (const key of [...parsed.searchParams.keys()]) {
-          if (/^(?:utm_.+|fbclid|gclid|mc_cid|mc_eid)$/i.test(key)) parsed.searchParams.delete(key);
-        }
-        canonicalUrl = parsed.toString();
-      } catch {
-        canonicalUrl = '';
-      }
-      const key = [event.source, event.title, event.startLocal, event.venue, canonicalUrl]
-        .map((value) => value.trim().toLowerCase()).join('|');
-      if (!deduped.has(key)) deduped.set(key, event);
-      if (retained) deduped.set(key, {
+      collectedEvents.push(retained ? {
         ...event,
         scheduleNotice: event.scheduleNotice || 'Saved from the last successful source refresh — confirm details with the organizer.',
-      });
+      } : event);
     }
   }
-  const events = [...deduped.values()].sort((a, b) => a.startLocal.localeCompare(b.startLocal) || a.distance - b.distance);
+  const events = dedupeEvents(collectedEvents).sort((a, b) => a.startLocal.localeCompare(b.startLocal) || a.distance - b.distance);
   const payload: EventsResponse = {
     events,
     updatedAt: new Date().toISOString(),

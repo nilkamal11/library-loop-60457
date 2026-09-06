@@ -1,5 +1,6 @@
 import type { EventsResponse, LiveEvent } from './live-event';
 import { CALENDAR_STALE_HOURS } from './calendar-config.ts';
+import { dedupeEvents } from './event-dedupe.ts';
 
 export type CalendarHealth = 'current' | 'partial' | 'stale' | 'overnight-only' | 'unavailable';
 
@@ -28,26 +29,6 @@ function unique(values: string[]) {
 
 function normalized(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
-function canonicalUrl(value: string) {
-  try {
-    const url = new URL(value);
-    url.hash = '';
-    for (const key of [...url.searchParams.keys()]) {
-      if (/^(?:utm_.+|fbclid|gclid|mc_cid|mc_eid)$/i.test(key)) url.searchParams.delete(key);
-    }
-    return url.toString().toLowerCase();
-  } catch {
-    return '';
-  }
-}
-
-function eventKey(event: LiveEvent) {
-  const officialUrl = canonicalUrl(event.url || event.registrationUrl);
-  const identity = `${normalized(event.title)}|${event.startLocal}|${normalized(event.venue)}`;
-  if (officialUrl) return `url:${officialUrl}|${identity}`;
-  return `text:${identity}|${normalized(event.source)}`;
 }
 
 function withinWindow(event: LiveEvent, start: string, endExclusive: string) {
@@ -80,14 +61,13 @@ export function mergeCalendarSnapshots(
 ): CalendarPayload {
   const endExclusive = addDays(start, days);
   const requestedEnd = addDays(endExclusive, -1);
-  const deduped = new Map<string, LiveEvent>();
+  const candidates: LiveEvent[] = [];
   for (const event of [...(daily?.events ?? []), ...overnight.events]) {
     if (!withinWindow(event, start, endExclusive) || !hasTrustedAudience(event)) continue;
-    const key = eventKey(event);
-    if (!deduped.has(key)) deduped.set(key, event);
+    candidates.push(event);
   }
 
-  const events = [...deduped.values()].sort((a, b) =>
+  const events = dedupeEvents(candidates).sort((a, b) =>
     a.startLocal.localeCompare(b.startLocal) || a.distance - b.distance || a.title.localeCompare(b.title));
   const futureStart = addDays(start, 30);
   const eventsAfter30Days = events.filter((event) => event.dateKey >= futureStart);

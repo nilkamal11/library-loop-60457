@@ -28,6 +28,14 @@ type BrowserSource = {
 const browserSources = librarySources as readonly BrowserSource[];
 const totalSources = structuredSources.length + browserSources.length;
 
+const manualDiscoveryGuides = [
+  { name: 'Kidlist', url: 'https://mykidlist.com/events/', policyUrl: 'https://mykidlist.com/terms-of-use/', note: 'Useful local leads; automated collection is not permitted by its current terms.' },
+  { name: 'Mommy Poppins — Southwest Chicago', url: 'https://mommypoppins.com/chicago/southwest', policyUrl: 'https://mommypoppins.com/kids/terms-of-use', note: 'Regional editorial guide; no permitted event feed was found.' },
+  { name: 'Macaroni KID Orland Park', url: 'https://orlandpark.macaronikid.com/events', policyUrl: 'https://familytravel.macaronikid.com/terms-conditions', note: 'Local family calendar retained as a manual research lead.' },
+  { name: 'Chicago Parent', url: 'https://www.chicagoparent.com/events/', policyUrl: 'https://www.chicagoparent.com/robots.txt', note: 'Manual lead only; automated access is disallowed.' },
+  { name: 'Brookfield Zoo daily activities', url: 'https://www.brookfieldzoo.org/activities-schedule', policyUrl: 'https://www.brookfieldzoo.org/terms-of-use', note: 'Useful same-day schedule; kept as a direct link because automated extraction is restricted.' },
+] as const;
+
 const adapterLabels: Record<FeedType, string> = {
   librarycalendar: 'LibraryCalendar JSON',
   tribe: 'WordPress Events API',
@@ -37,9 +45,11 @@ const adapterLabels: Record<FeedType, string> = {
   rss: 'RSS',
   bibliocommons: 'BiblioCommons RSS',
   mycalendar: 'My Calendar API',
+  socrata: 'Chicago Data Portal JSON',
+  kiddo: 'KiddoChicago public JSON',
 };
 
-const kindOrder = ['Library', 'Park district', 'Recreation', 'Forest preserve'] as const;
+const kindOrder = ['Library', 'Park district', 'Recreation', 'Forest preserve', 'Family guide'] as const;
 
 function formatDistance(distance: number) {
   return Number.isInteger(distance) ? distance.toFixed(1) : String(distance);
@@ -53,6 +63,8 @@ function sourceNotes(source: FeedConfig) {
   if (source.branchRules?.length) notes.push(`${source.branchRules.length} branch rules`);
   if (source.strictBranchDistance) notes.push('strict in-radius branches');
   if (source.detailBase) notes.push('official detail-link template');
+  if (source.curatedNatureProgram) notes.push('reviewed nature-family fallback');
+  if (source.curatedPublicEvent) notes.push('reviewed community-event fallback');
   return notes;
 }
 
@@ -95,7 +107,7 @@ const parameterGroups = [
   {
     title: 'Structured collection',
     items: [
-      ['Configured sources', `${structuredSources.length} official feeds`],
+      ['Configured sources', `${structuredSources.length} reviewed feeds`],
       ['Collection window', '60 future days, refreshed into saved indexed event rows'],
       ['Coverage meaning', '60-day collection target; each organizer controls how far ahead it publishes'],
       ['Parallelism', '5 feeds at a time'],
@@ -103,7 +115,8 @@ const parameterGroups = [
       ['robots.txt timeout', '8 seconds'],
       ['Redirect policy', 'HTTPS only; same origin only; at most 3 redirects'],
       ['Saved feed cache', '300 seconds for unauthenticated structured reads'],
-      ['Feed formats', 'JSON, REST, ICS, RSS, BiblioCommons, Communico, My Calendar, and Squarespace'],
+      ['Feed formats', 'Organizer JSON, REST, ICS, RSS, BiblioCommons, Communico, My Calendar, Squarespace, Socrata, and one attributed family guide'],
+      ['Discovery safety cap', '8 MB response and 10,000 raw KiddoChicago records before the feed fails safely'],
     ],
   },
   {
@@ -205,7 +218,7 @@ export default function SourcesPage() {
 
           <div className="source-lane">
             <div className="lane-heading"><div><p className="kicker">Lane one</p><h3>Structured feeds</h3></div><strong>{structuredSources.length}</strong></div>
-            <p className="lane-copy">Direct, machine-readable feeds from reviewed official organizations. The collection adapter reads the endpoint shown on each row.</p>
+            <p className="lane-copy">Machine-readable feeds from reviewed official organizations, plus one clearly attributed family discovery service. The collection adapter reads the endpoint shown on each row.</p>
             {kindOrder.map((kind) => {
               const sources = structuredSources.filter((source) => source.sourceKind === kind).sort((a, b) => a.distance - b.distance || a.name.localeCompare(b.name));
               return <section className="source-group" aria-labelledby={`kind-${kind.replaceAll(' ', '-')}`} key={kind}>
@@ -225,6 +238,20 @@ export default function SourcesPage() {
                 <div className="source-distance"><strong>{formatDistance(source.distance)} mi</strong><span>from 60457</span></div>
                 <div className="source-address"><span>{source.note}</span><small>{source.requiresVisualReview ? 'Visual review required' : 'Semantic page extraction'}</small></div>
                 <div className="source-endpoints"><a className="source-endpoint" href={source.url} target="_blank" rel="noopener noreferrer">Primary: {source.url}</a>{source.alternateUrls?.map((url) => <a className="source-endpoint" href={url} target="_blank" rel="noopener noreferrer" key={url}>Reviewed alternate: {url}</a>)}</div>
+              </li>)}
+            </ul>
+          </div>
+
+          <div className="source-lane browser-lane">
+            <div className="lane-heading"><div><p className="kicker">Manual research</p><h3>Other family-event guides</h3></div><strong>{manualDiscoveryGuides.length}</strong></div>
+            <p className="lane-copy">These are useful places to spot-check, but they are not counted among the {totalSources} collected sources. Their current terms, robots rules, or lack of a dependable event feed mean Library Loop links to them instead of copying them automatically.</p>
+            <ul className="source-list browser-source-list">
+              {manualDiscoveryGuides.map((source) => <li className="source-row" key={source.name}>
+                <div className="source-name"><a href={source.url} target="_blank" rel="noopener noreferrer">{source.name} <span aria-hidden="true">↗</span></a><code>manual lead</code></div>
+                <div className="source-meta"><strong>Manual review</strong><span>Not collected</span></div>
+                <div className="source-distance"><strong>On demand</strong><span>not scheduled</span></div>
+                <div className="source-address"><span>{source.note}</span><small>Organizer pages remain the final source</small></div>
+                <div className="source-endpoints"><a className="source-endpoint" href={source.url} target="_blank" rel="noopener noreferrer">Open guide</a><a className="source-endpoint" href={source.policyUrl} target="_blank" rel="noopener noreferrer">Why it is manual</a></div>
               </li>)}
             </ul>
           </div>
